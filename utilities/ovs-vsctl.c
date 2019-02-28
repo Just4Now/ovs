@@ -138,7 +138,7 @@ main(int argc, char *argv[])
     size_t n_commands;
 
     set_program_name(argv[0]);
-    fatal_ignore_sigpipe();
+    fatal_ignore_sigpipe();     //忽略SIGPIPE信号
     vlog_set_levels(NULL, VLF_CONSOLE, VLL_WARN);
     vlog_set_levels_from_string_assert("reconnect:warn");
 
