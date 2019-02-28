@@ -79,7 +79,7 @@ ds_put_uninit(struct ds *ds, size_t n)
 void
 ds_put_char__(struct ds *ds, char c)
 {
-    *ds_put_uninit(ds, 1) = c;
+    *ds_put_uninit(ds, 1) = c;    //给ds追加一个字节,并初始化为c
 }
 
 /* Appends unicode code point 'uc' to 'ds' in UTF-8 encoding. */

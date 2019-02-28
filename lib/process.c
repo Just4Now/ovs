@@ -117,9 +117,12 @@ process_escape_args(char **argv)
     for (argp = argv; *argp; argp++) {
         const char *arg = *argp;
         const char *p;
+        //每个参数之间增加一个空格
         if (argp != argv) {
+            //给ds.string追加一个字节‘ ’,ds.length和ds.allocated各增加一个字节
             ds_put_char(&ds, ' ');
         }
+        //如果包含这些字符的话
         if (arg[strcspn(arg, " \t\r\n\v\\\'\"")]) {
             ds_put_char(&ds, '"');
             for (p = arg; *p; p++) {
@@ -130,9 +133,11 @@ process_escape_args(char **argv)
             }
             ds_put_char(&ds, '"');
         } else {
+            //给ds追加arg字符串的长度，并拷贝到arg中
             ds_put_cstr(&ds, arg);
         }
     }
+    //返回ds.string
     return ds_cstr(&ds);
 }
 

@@ -133,7 +133,7 @@ main(int argc, char *argv[])
 {
     struct ovsdb_idl *idl;
     struct ctl_command *commands;
-    struct shash local_options;
+    struct shash local_options;     //一个哈希表
     unsigned int seqno;
     size_t n_commands;
 
@@ -197,7 +197,7 @@ static void
 parse_options(int argc, char *argv[], struct shash *local_options)
 {
     enum {
-        OPT_DB = UCHAR_MAX + 1,
+        OPT_DB = UCHAR_MAX + 1,     //256开始
         OPT_ONELINE,
         OPT_NO_SYSLOG,
         OPT_NO_WAIT,
