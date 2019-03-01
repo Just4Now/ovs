@@ -2208,7 +2208,7 @@ ctl_add_cmd_options(struct option **options_p, size_t *n_options_p,
 {
     struct option *o;
     const struct shash_node *node;
-    size_t n_existing_options = *n_options_p;
+    size_t n_existing_options = *n_options_p;   //28
 
     SHASH_FOR_EACH (node, &all_commands) {
         const struct ctl_command_syntax *p = node->data;
@@ -2218,12 +2218,12 @@ ctl_add_cmd_options(struct option **options_p, size_t *n_options_p,
             char *name;
             char *s;
 
-            s = xstrdup(p->options);
+            s = xstrdup(p->options);    //拷贝p->options到s
             for (name = strtok_r(s, ",", &save_ptr); name != NULL;
                  name = strtok_r(NULL, ",", &save_ptr)) {
                 ovs_assert(name[0] == '-' && name[1] == '-' && name[2]);
                 name += 2;
-
+                //检索字符串 name 开头连续有几个字符都不含字符串 "=?" 中的字符。
                 size_t n = strcspn(name, "=?");
                 int has_arg = (name[n] == '\0' ? no_argument
                                : name[n] == '=' ? required_argument
@@ -2235,17 +2235,19 @@ ctl_add_cmd_options(struct option **options_p, size_t *n_options_p,
                     ovs_assert(o - *options_p >= n_existing_options);
                     ovs_assert(o->has_arg == has_arg);
                 } else {
+                    //新增加一个选项
                     o = add_option(options_p, n_options_p, allocated_options_p);
                     o->name = xstrdup(name);
                     o->has_arg = has_arg;
                     o->flag = NULL;
-                    o->val = opt_val;
+                    o->val = opt_val;   //263
                 }
             }
 
             free(s);
         }
     }
+    //最后再增加一个选项，并初始化为0
     o = add_option(options_p, n_options_p, allocated_options_p);
     memset(o, 0, sizeof *o);
 }

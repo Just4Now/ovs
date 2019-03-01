@@ -231,7 +231,7 @@ parse_options(int argc, char *argv[], struct shash *local_options)
         {"peer-ca-cert", required_argument, NULL, OPT_PEER_CA_CERT},
         {NULL, 0, NULL, 0},
     };
-    const int n_global_long_options = ARRAY_SIZE(global_long_options) - 1;
+    const int n_global_long_options = ARRAY_SIZE(global_long_options) - 1; //28
     char *tmp, *short_options;
 
     struct option *options;
@@ -239,8 +239,10 @@ parse_options(int argc, char *argv[], struct shash *local_options)
     size_t n_options;
     size_t i;
 
+    //返回"t:hVv::f:d:p:c:C:"这的的短选项用于调用get_opt()
     tmp = ovs_cmdl_long_options_to_short_options(global_long_options);
-    short_options = xasprintf("+%s", tmp);
+    //xasprintf --> 增强版的sprintf
+    short_options = xasprintf("+%s", tmp);  //short_options --> "+t:hVv::f:d:p:c:C:"
     free(tmp);
 
     /* We want to parse both global and command-specific options here, but
@@ -248,15 +250,17 @@ parse_options(int argc, char *argv[], struct shash *local_options)
      * options into a dynamic array, then append all of the command-specific
      * options. */
     options = xmemdup(global_long_options, sizeof global_long_options);
-    allocated_options = ARRAY_SIZE(global_long_options);
-    n_options = n_global_long_options;
+    allocated_options = ARRAY_SIZE(global_long_options);    //29
+    n_options = n_global_long_options;  //28
     ctl_add_cmd_options(&options, &n_options, &allocated_options, OPT_LOCAL);
+    //                            40,增加了12             58
 
     for (;;) {
         int idx;
         int c;
-
         c = getopt_long(argc, argv, short_options, options, &idx);
+        //对于短选项，返回短选项的字符，比如‘h’,对于长选项如果option.flag=0x0,
+        //则返回option.val,否则返回0
         if (c == -1) {
             break;
         }
@@ -341,7 +345,7 @@ parse_options(int argc, char *argv[], struct shash *local_options)
     free(short_options);
 
     if (!db) {
-        db = ctl_default_db();
+        db = ctl_default_db();  //打开默认数据库
     }
 
     for (i = n_global_long_options; options[i].name; i++) {
