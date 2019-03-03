@@ -148,6 +148,8 @@ main(int argc, char *argv[])
     char *args = process_escape_args(argv);
     shash_init(&local_options);
     parse_options(argc, argv, &local_options);
+
+    //将解析好的命令行存放在commands中，n_commands为命令数量
     char *error = ctl_parse_commands(argc - optind, argv + optind,
                                      &local_options, &commands, &n_commands);
     if (error) {
@@ -160,6 +162,7 @@ main(int argc, char *argv[])
 
     /* Initialize IDL. */
     idl = the_idl = ovsdb_idl_create(db, &ovsrec_idl_class, false, retry);
+    //运行命令的先提函数，如果有的话,比如pre_create
     run_prerequisites(commands, n_commands, idl);
 
     /* Execute the commands.
@@ -171,7 +174,8 @@ main(int argc, char *argv[])
      * view of the database before we try the transaction again. */
     seqno = ovsdb_idl_get_seqno(idl);
     for (;;) {
-        ovsdb_idl_run(idl);
+        ovsdb_idl_run(idl);     //会导致ovsdb_idl_get_seqno(idl)的返回值增加，
+                                //具体增加值取决于执行了多少事务
         if (!ovsdb_idl_is_alive(idl)) {
             int retval = ovsdb_idl_get_last_error(idl);
             ctl_fatal("%s: database connection failed (%s)",
@@ -180,6 +184,7 @@ main(int argc, char *argv[])
 
         if (seqno != ovsdb_idl_get_seqno(idl)) {
             seqno = ovsdb_idl_get_seqno(idl);
+            //配置处理函数
             if (do_vsctl(args, commands, n_commands, idl)) {
                 free(args);
                 exit(EXIT_SUCCESS);
@@ -187,8 +192,8 @@ main(int argc, char *argv[])
         }
 
         if (seqno == ovsdb_idl_get_seqno(idl)) {
-            ovsdb_idl_wait(idl);
-            poll_block();
+            ovsdb_idl_wait(idl);    //数据库时间等待处理
+            poll_block();   //时间等待
         }
     }
 }
@@ -2518,7 +2523,7 @@ run_prerequisites(struct ctl_command *commands, size_t n_commands,
 {
     struct ctl_command *c;
 
-    ovsdb_idl_add_table(idl, &ovsrec_table_open_vswitch);
+    ovsdb_idl_add_table(idl, &ovsrec_table_open_vswitch);   //向数据库添加openvswitch表
     if (wait_for_reload) {
         ovsdb_idl_add_column(idl, &ovsrec_open_vswitch_col_cur_cfg);
     }
@@ -2530,7 +2535,7 @@ run_prerequisites(struct ctl_command *commands, size_t n_commands,
             c->table = NULL;
 
             vsctl_context_init(&vsctl_ctx, c, idl, NULL, NULL, NULL);
-            (c->syntax->prerequisites)(&vsctl_ctx.base);
+            (c->syntax->prerequisites)(&vsctl_ctx.base);    //运行pre_cmd_set()等
             if (vsctl_ctx.base.error) {
                 ctl_fatal("%s", vsctl_ctx.base.error);
             }

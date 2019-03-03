@@ -476,11 +476,11 @@ pre_get_table(struct ctl_context *ctx, const char *table_name,
               const struct ovsdb_idl_table_class **tablep)
 {
     const struct ovsdb_idl_table_class *table;
-    char *error = get_table(table_name, &table);
+    char *error = get_table(table_name, &table);    //根据表名找到表
     if (error) {
         return error;
     }
-    ovsdb_idl_add_table(ctx->idl, table);
+    ovsdb_idl_add_table(ctx->idl, table);   //想数据库中增加表
 
     const struct ctl_table_class *ctl = &ctl_classes[table - idl_classes];
     for (int i = 0; i < ARRAY_SIZE(ctl->row_ids); i++) {
@@ -649,7 +649,7 @@ pre_parse_column_key_value(struct ctl_context *ctx, const char *arg,
     char *error;
 
     p = arg;
-    error = ovsdb_token_parse(&p, &column_name);
+    error = ovsdb_token_parse(&p, &column_name);       //获取表中列的名称
     if (error) {
         goto out;
     }
@@ -658,7 +658,7 @@ pre_parse_column_key_value(struct ctl_context *ctx, const char *arg,
         goto out;
     }
 
-    error = pre_get_column(ctx, table, column_name, &column);
+    error = pre_get_column(ctx, table, column_name, &column);   //为数据库增加行
 out:
     free(column_name);
 
@@ -1884,7 +1884,7 @@ static char * OVS_WARN_UNUSED_RESULT
 parse_command(int argc, char *argv[], struct shash *local_options,
               struct ctl_command *command)
 {
-    const struct ctl_command_syntax *p;
+    const struct ctl_command_syntax *l;
     struct shash_node *node;
     int n_arg;
     int i;
@@ -1901,6 +1901,7 @@ parse_command(int argc, char *argv[], struct shash *local_options,
             break;
         }
 
+        //如果命令中存在key=value这样的形式，比如--id=@nf，则key="--id",value="nf"
         equals = strchr(option, '=');
         if (equals) {
             key = xmemdup0(option, equals - option);
@@ -1916,13 +1917,14 @@ parse_command(int argc, char *argv[], struct shash *local_options,
             error = xasprintf("'%s' option specified multiple times", argv[i]);
             goto error;
         }
+        //将key、value不重复地添加到command->options这个哈希表中
         shash_add_nocopy(&command->options, key, value);
     }
     if (i == argc) {
         error = xstrdup("missing command name (use --help for help)");
         goto error;
     }
-
+    //在all_commands哈希表中找到命令行参数argv[i],p为一个ctl_command_syntax指针
     p = shash_find_data(&all_commands, argv[i]);
     if (!p) {
         error = xasprintf("unknown command '%s'; use --help for help",
@@ -1951,7 +1953,7 @@ parse_command(int argc, char *argv[], struct shash *local_options,
             }
         }
     }
-
+    //set Bridge s1 netflow=@ns --> set为命令，带了三个参数
     n_arg = argc - i - 1;
     if (n_arg < p->min_args) {
         error = xasprintf("'%s' command requires at least %d arguments",
@@ -2269,6 +2271,10 @@ ctl_parse_commands(int argc, char *argv[], struct shash *local_options,
     *n_commandsp = 0;
 
     for (start = i = 0; i <= argc; i++) {
+        //command以"--"分隔,比如ovs-vsctl -- set Bridge s1 netflow=@nf -- 
+        //--id=@nf create NetFlow  targets=\"192.168.1.222:5566\" active-timeout=30,
+        //set Bridge s1 netflow=@nf和--id=@nf create NetFlow  targets=\"192.168.1.222:5566\" 
+        //active-timeout=30各为一组命令，所以有两个command
         if (i == argc || !strcmp(argv[i], "--")) {
             if (i > start) {
                 if (n_commands >= allocated_commands) {
