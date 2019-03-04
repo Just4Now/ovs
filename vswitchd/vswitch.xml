@@ -5404,6 +5404,77 @@ ovs-vsctl add-port br0 p0 -- set Interface p0 type=patch options:peer=p1 \
     </group>
   </table>
 
+   <table name="NetStream">
+    NetStream description.
+
+    <column name="targets">
+      NetStream targets in the form
+      <code><var>ip</var>:<var>port</var></code>.  The <var>ip</var>
+      must be specified numerically, not as a DNS name.
+    </column>
+
+    <column name="engine_id">
+      Engine ID to use in NetStream messages.  Defaults to datapath index
+      if not specified.
+    </column>
+
+    <column name="engine_type">
+      Engine type to use in NetStream messages.  Defaults to datapath
+      index if not specified.
+    </column>
+
+    <column name="add_id_to_interface">
+      <p>If this column's value is <code>false</code>, the ingress and egress
+      interface fields of NetFlow flow records are derived from OpenFlow port
+      numbers.  When it is <code>true</code>, the 7 most significant bits of
+      these fields will be replaced by the least significant 7 bits of the
+      engine id.  This is useful because many NetFlow collectors do not
+      expect multiple switches to be sending messages from the same host, so
+      they do not store the engine information which could be used to
+      disambiguate the traffic.</p>
+      <p>When this option is enabled, a maximum of 508 ports are supported.</p>
+    </column>
+
+    <column name="sample_mode">
+      sample_mode
+    </column>
+
+    <column name="sample_value">
+      sample_value
+    </column>
+
+    <column name="inactive_timeout">
+      inactive_timeout
+    </column>
+
+    <column name="active_timeout">
+      active_timeout
+    </column>
+
+    <column name="flow_cache_number">
+      flow_cache_number
+    </column>
+
+    <column name="save_to_local">
+      save_to_local
+    </column>
+
+    <column name="save_to_local_path">
+      save_to_local_path
+    </column>
+
+    <column name="tcp_terminate">
+      tcp_terminate
+    </column>
+
+    <group title="Common Columns">
+      The overall purpose of these columns is described under <code>Common
+      Columns</code> at the beginning of this document.
+
+      <column name="external_ids"/>
+    </group>
+  </table>
+
   <table name="SSL">
     SSL configuration for an Open_vSwitch.
 
@@ -5442,6 +5513,8 @@ ovs-vsctl add-port br0 p0 -- set Interface p0 type=patch options:peer=p1 \
       <column name="external_ids"/>
     </group>
   </table>
+
+  
 
   <table name="sFlow">
     <p>A set of sFlow(R) targets.  sFlow is a protocol for remote
