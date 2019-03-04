@@ -1884,7 +1884,7 @@ static char * OVS_WARN_UNUSED_RESULT
 parse_command(int argc, char *argv[], struct shash *local_options,
               struct ctl_command *command)
 {
-    const struct ctl_command_syntax *l;
+    const struct ctl_command_syntax *p;
     struct shash_node *node;
     int n_arg;
     int i;
