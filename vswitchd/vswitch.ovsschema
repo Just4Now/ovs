@@ -517,12 +517,13 @@
          "type": {"key": {"type": "integer",
                           "minInteger": 1, "maxInteger": 65536},
                   "min": 0, "max": 1}},
-       "save_to_local": {"type": "boolean", "min": 0, "max": 1},
+       "save_to_local": {
+         "type": "boolean", "min": 0, "max": 1},
        "save_to_local_path": {
          "type": {"key": {"type": "string"},
                   "min": 0, "max": 1}},
        "tcp_terminate": {
-         "type": "boolean"},
+         "type": "boolean", "min": 0, "max": 1},
        "external_ids": {
          "type": {"key": "string", "value": "string",
                   "min": 0, "max": "unlimited"}}}},
