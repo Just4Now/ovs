@@ -1729,7 +1729,7 @@ cmd_create(struct ctl_context *ctx)
             return;
         }
     }
-    ds_put_format(&ctx->output, UUID_FMT, UUID_ARGS(&row->uuid));
+    ds_put_format(&ctx->output, UUID_FMT, UUID_ARGS(&row->uuid));   //将uuid拷贝到ctx->output
 }
 
 /* This function may be used as the 'postprocess' function for commands that

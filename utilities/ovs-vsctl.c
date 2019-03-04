@@ -2586,23 +2586,27 @@ static bool
 do_vsctl(const char *args, struct ctl_command *commands, size_t n_commands,
          struct ovsdb_idl *idl)
 {
-    struct ovsdb_idl_txn *txn;
+    struct ovsdb_idl_txn *txn;  //数据库业务对象txn
     const struct ovsrec_open_vswitch *ovs;
     enum ovsdb_idl_txn_status status;
-    struct ovsdb_symbol_table *symtab;
-    struct vsctl_context vsctl_ctx;
-    struct ctl_command *c;
+    struct ovsdb_symbol_table *symtab;  //A table mapping from names to data items.
+                                        //Currently the data items are always UUIDs;
+                                        //perhaps this will be expanded in the future.
+    struct vsctl_context vsctl_ctx; //ovs-vsctl specific context.继承ctl_context
+    struct ctl_command *c;  //命令对应的数据结构
     struct shash_node *node;
     int64_t next_cfg = 0;
-    char *ppid_info = NULL;
+    char *ppid_info = NULL; //父进程信息
 
-    txn = the_idl_txn = ovsdb_idl_txn_create(idl);
+    txn = the_idl_txn = ovsdb_idl_txn_create(idl);  //创建新的数据库业务对象txn
     if (dry_run) {
         ovsdb_idl_txn_set_dry_run(txn);
     }
 
     ppid_info = vsctl_parent_process_info();
     if (ppid_info) {
+        /* Appends 's', which is treated as a printf()-type format string, to the
+        * comments that will be passed to the OVSDB server when 'txn' is committed. */      
         ovsdb_idl_txn_add_comment(txn, "ovs-vsctl (invoked by %s): %s",
                                   ppid_info, args);
         free(ppid_info);
@@ -2610,12 +2614,12 @@ do_vsctl(const char *args, struct ctl_command *commands, size_t n_commands,
         ovsdb_idl_txn_add_comment(txn, "ovs-vsctl: %s", args);
     }
 
-    ovs = ovsrec_open_vswitch_first(idl);
+    ovs = ovsrec_open_vswitch_first(idl);   //打开ovs数据库
     if (!ovs) {
         /* XXX add verification that table is empty */
         ovs = ovsrec_open_vswitch_insert(txn);
     }
-
+    //Wait for ovs-vswitchd to reload its configuration, 默认True
     if (wait_for_reload) {
         ovsdb_idl_txn_increment(txn, &ovs->header_,
                                 &ovsrec_open_vswitch_col_next_cfg, false);
@@ -2627,11 +2631,11 @@ do_vsctl(const char *args, struct ctl_command *commands, size_t n_commands,
         ds_init(&c->output);
         c->table = NULL;
     }
-    vsctl_context_init(&vsctl_ctx, NULL, idl, txn, ovs, symtab);
+    vsctl_context_init(&vsctl_ctx, NULL, idl, txn, ovs, symtab);    //创建vsctl的命令执行对象ctx
     for (c = commands; c < &commands[n_commands]; c++) {
         vsctl_context_init_command(&vsctl_ctx, c);
-        if (c->syntax->run) {
-            (c->syntax->run)(&vsctl_ctx.base);
+        if (c->syntax->run) {   //执行命令对应的事务
+            (c->syntax->run)(&vsctl_ctx.base);  //回调all_commands结构中定义的run函数
         }
         if (vsctl_ctx.base.error) {
             ctl_fatal("%s", vsctl_ctx.base.error);
@@ -2639,11 +2643,11 @@ do_vsctl(const char *args, struct ctl_command *commands, size_t n_commands,
         vsctl_context_done_command(&vsctl_ctx, c);
 
         if (vsctl_ctx.base.try_again) {
-            vsctl_context_done(&vsctl_ctx, NULL);
+            vsctl_context_done(&vsctl_ctx, NULL);   //释放对象ctx
             goto try_again;
         }
     }
-    vsctl_context_done(&vsctl_ctx, NULL);
+    vsctl_context_done(&vsctl_ctx, NULL);   //释放对象ctx
 
     SHASH_FOR_EACH (node, &symtab->sh) {
         struct ovsdb_symbol *symbol = node->data;
@@ -2665,7 +2669,7 @@ do_vsctl(const char *args, struct ctl_command *commands, size_t n_commands,
         }
     }
 
-    status = ovsdb_idl_txn_commit_block(txn);
+    status = ovsdb_idl_txn_commit_block(txn);   //数据库commit
     if (wait_for_reload && status == TXN_SUCCESS) {
         next_cfg = ovsdb_idl_txn_get_increment_new_value(txn);
     }
@@ -2673,7 +2677,7 @@ do_vsctl(const char *args, struct ctl_command *commands, size_t n_commands,
         for (c = commands; c < &commands[n_commands]; c++) {
             if (c->syntax->postprocess) {
                 vsctl_context_init(&vsctl_ctx, c, idl, txn, ovs, symtab);
-                (c->syntax->postprocess)(&vsctl_ctx.base);
+                (c->syntax->postprocess)(&vsctl_ctx.base);  //回调all_commands结构中定义的post函数
                 if (vsctl_ctx.base.error) {
                     ctl_fatal("%s", vsctl_ctx.base.error);
                 }
@@ -2709,7 +2713,7 @@ do_vsctl(const char *args, struct ctl_command *commands, size_t n_commands,
         OVS_NOT_REACHED();
     }
 
-    ovsdb_symbol_table_destroy(symtab);
+    ovsdb_symbol_table_destroy(symtab); //释放symtab对象
 
     for (c = commands; c < &commands[n_commands]; c++) {
         struct ds *ds = &c->output;
@@ -2766,8 +2770,8 @@ do_vsctl(const char *args, struct ctl_command *commands, size_t n_commands,
         }
     done: ;
     }
-    ovsdb_idl_txn_destroy(txn);
-    ovsdb_idl_destroy(idl);
+    ovsdb_idl_txn_destroy(txn); //释放txn
+    ovsdb_idl_destroy(idl); //释放idl
 
     return true;
 
