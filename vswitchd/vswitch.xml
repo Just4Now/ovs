@@ -1000,6 +1000,10 @@
         NetFlow configuration.
       </column>
 
+      <column name="netstream">
+        netstream configuration.
+      </column>
+
       <column name="sflow">
         sFlow(R) configuration.
       </column>
