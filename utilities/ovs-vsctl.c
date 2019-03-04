@@ -1060,6 +1060,7 @@ pre_cmd_emer_reset(struct ctl_context *ctx)
     ovsdb_idl_add_column(ctx->idl, &ovsrec_bridge_col_fail_mode);
     ovsdb_idl_add_column(ctx->idl, &ovsrec_bridge_col_mirrors);
     ovsdb_idl_add_column(ctx->idl, &ovsrec_bridge_col_netflow);
+    ovsdb_idl_add_column(ctx->idl, &ovsrec_bridge_col_netstream);
     ovsdb_idl_add_column(ctx->idl, &ovsrec_bridge_col_sflow);
     ovsdb_idl_add_column(ctx->idl, &ovsrec_bridge_col_ipfix);
     ovsdb_idl_add_column(ctx->idl, &ovsrec_bridge_col_flood_vlans);
@@ -1085,6 +1086,7 @@ cmd_emer_reset(struct ctl_context *ctx)
     const struct ovsrec_controller *ctrl, *next_ctrl;
     const struct ovsrec_manager *mgr, *next_mgr;
     const struct ovsrec_netflow *nf, *next_nf;
+    const struct ovsrec_netstream *ns, *next_ns;
     const struct ovsrec_ssl *ssl, *next_ssl;
     const struct ovsrec_sflow *sflow, *next_sflow;
     const struct ovsrec_ipfix *ipfix, *next_ipfix;
@@ -1101,6 +1103,7 @@ cmd_emer_reset(struct ctl_context *ctx)
         ovsrec_bridge_set_fail_mode(br, NULL);
         ovsrec_bridge_set_mirrors(br, NULL, 0);
         ovsrec_bridge_set_netflow(br, NULL);
+        ovsrec_bridge_set_netstream(br, NULL);
         ovsrec_bridge_set_sflow(br, NULL);
         ovsrec_bridge_set_ipfix(br, NULL);
         ovsrec_bridge_set_flood_vlans(br, NULL, 0);
@@ -1140,6 +1143,10 @@ cmd_emer_reset(struct ctl_context *ctx)
 
     OVSREC_NETFLOW_FOR_EACH_SAFE (nf, next_nf, idl) {
         ovsrec_netflow_delete(nf);
+    }
+
+    OVSREC_NETSTREAM_FOR_EACH_SAFE (ns, next_ns, idl) {
+        ovsrec_netstream_delete(nf);
     }
 
     OVSREC_SSL_FOR_EACH_SAFE (ssl, next_ssl, idl) {
@@ -2404,6 +2411,9 @@ static const struct ctl_table_class tables[OVSREC_N_TABLES] = {
 
     [OVSREC_TABLE_NETFLOW].row_ids[0]
     = {&ovsrec_bridge_col_name, NULL, &ovsrec_bridge_col_netflow},
+
+    [OVSREC_TABLE_NETSTREAM].row_ids[0]
+    = {&ovsrec_bridge_col_name, NULL, &ovsrec_bridge_col_netstream},
 
     [OVSREC_TABLE_PORT].row_ids[0] = {&ovsrec_port_col_name, NULL, NULL},
 
