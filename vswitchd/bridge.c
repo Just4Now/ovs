@@ -18,6 +18,8 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "async-append.h"
 #include "bfd.h"
@@ -245,6 +247,7 @@ static void bridge_add_ports(struct bridge *,
 
 static void bridge_configure_datapath_id(struct bridge *);
 static void bridge_configure_netflow(struct bridge *);
+static void bridge_configure_netstream(struct bridge *);
 static void bridge_configure_forward_bpdu(struct bridge *);
 static void bridge_configure_mac_table(struct bridge *);
 static void bridge_configure_mcast_snooping(struct bridge *);
@@ -704,6 +707,7 @@ bridge_reconfigure(const struct ovsrec_open_vswitch *ovs_cfg)
         bridge_configure_mcast_snooping(br);
         bridge_configure_remotes(br, managers, n_managers);
         bridge_configure_netflow(br);
+        bridge_configure_netstream(br);
         bridge_configure_sflow(br, &sflow_bridge_number);
         bridge_configure_ipfix(br);
         bridge_configure_spanning_tree(br);
@@ -1166,6 +1170,113 @@ bridge_configure_netflow(struct bridge *br)
     /* Configure. */
     if (ofproto_set_netflow(br->ofproto, &opts)) {
         VLOG_ERR("bridge %s: problem setting netflow collectors", br->name);
+    }
+    sset_destroy(&opts.collectors);
+}
+
+/* Set NetStream configuration on 'br'. */
+static void
+bridge_configure_netstream(struct bridge *br)
+{
+    struct ovsrec_netstream *cfg = br->cfg->netstream;
+    struct netstream_options opts;
+
+    if (!cfg) {
+        ofproto_set_netstream(br->ofproto, NULL);
+        return;
+    }
+
+    memset(&opts, 0, sizeof opts);
+
+    /* Get default NetStream configuration from datapath.
+     * Apply overrides from 'cfg'. */
+    ofproto_get_netstream_ids(br->ofproto, &opts.engine_type, &opts.engine_id);
+    if (cfg->engine_type) {
+        opts.engine_type = *cfg->engine_type;
+    }
+    if (cfg->engine_id) {
+        opts.engine_id = *cfg->engine_id;
+    }
+
+    /* Confugure sample mode and value */
+    if (cfg->sample_mode) {
+        if (strcmp(cfg->sample_mode, "random_packets")) {
+            opts.sample_mode = RANDOM_PACKETS;
+        }else if(strcmp(cfg->sample_mode, "fix_packets")) {
+            opts.sample_mode = FIX_PACKETS;
+        }
+        else {
+            VLOG_WARN("bridge %s: sample mode set to unkonwn mode, "
+                      "using default mode instead.(random-packets)", br->name);
+            opts.sample_mode = NS_SAMPLE_MODE_DEFAULT;
+        }
+    }else
+    {
+        opts.sample_mode = NS_SAMPLE_MODE_DEFAULT;
+    }
+    /* sample_value */
+    opt.sample_value = NS_SAMPLE_VALUE_DEFAULT;
+    if (cfg->sample_value) {
+        opt.sample_value = cfg->sample_value;
+    }      
+
+    /* Confugure inactive timeout interval */
+    opt.inactive_timeout = NS_INACTIVE_TIMEOUT_DEFAULT;
+    if (cfg->active_timeou) {
+        opts.inactive_timeout = cfg->active_timeout;
+    }
+
+    /* Configure active timeout interval. */
+    opt.active_timeout = NS_ACTIVE_TIMEOUT_DEFAULT;
+    if (cfg->active_timeout) {
+        opts.active_timeout = cfg->active_timeout;
+    }
+
+    /* flow_cache_number */
+    opts.flow_cache_number = NS_FLOW_CACHE_NUMBER_DEFAULT;
+    if (cfg->flow_cache_number) {
+        opts.flow_cache_number = cfg->flow_cache_number;
+    }
+
+    /* Add engine ID to interface number to disambiguate bridgs? */
+    opts.add_id_to_iface = cfg->add_id_to_interface;
+    if (opts.add_id_to_iface) {
+        if (opts.engine_id > 0x7f) {
+            VLOG_WARN("bridge %s: NetStream port mangling may conflict with "
+                      "another vswitch, choose an engine id less than 128",
+                      br->name);
+        }
+        if (hmap_count(&br->ports) > 508) {
+            VLOG_WARN("bridge %s: NetStream port mangling will conflict with "
+                      "another port when more than 508 ports are used",
+                      br->name);
+        }
+    }
+
+    /* Save to local and path*/
+    opt.save_to_local = cfg->save_to_local;
+    if (opt.save_to_local) {
+        /* check if the path exists */
+        strcpy(opt.save_to_local_path, "");
+        if (access(cfg->save_to_local_path, F_OK) != -1) {
+            strcpy(opt.save_to_local_path, cfg->save_to_local_path);
+        }else
+        {
+            VLOG_WARN("bridge %s: The netstream db saving path does not exist, "
+                      "using default path:%s instead.", br->name, "");
+        }    
+    }
+
+    /* TCP Flags */
+    opt.tcp_flag = cfg->tcp_flag;
+    
+    /* Collectors. */
+    sset_init(&opts.collectors);
+    sset_add_array(&opts.collectors, cfg->targets, cfg->n_targets);
+
+    /* Configure. */
+    if (ofproto_set_netstream(br->ofproto, &opts)) {
+        VLOG_ERR("bridge %s: problem setting netstream collectors", br->name);
     }
     sset_destroy(&opts.collectors);
 }

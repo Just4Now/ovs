@@ -1392,6 +1392,13 @@ struct ofproto_class {
     void (*get_netflow_ids)(const struct ofproto *ofproto,
                             uint8_t *engine_type, uint8_t *engine_id);
 
+    /* Configures NetStream on 'ofproto' according to the options in
+     * 'netstream_options', or turns off NetStream if 'netstream_options' is NULL.*/
+    int (*set_netstream)(struct ofproto *ofproto,
+                       const struct netstream_options *netstream_options);
+    void (*get_netstream_ids)(const struct ofproto *ofproto,
+                            uint8_t *engine_type, uint8_t *engine_id);
+
     /* Configures sFlow on 'ofproto' according to the options in
      * 'sflow_options', or turns off sFlow if 'sflow_options' is NULL.
      *

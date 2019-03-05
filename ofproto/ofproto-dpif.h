@@ -289,6 +289,7 @@ struct ofproto_dpif {
 
     /* Bridging. */
     struct netflow *netflow;
+    struct netstream *netstream;
     struct dpif_sflow *sflow;
     struct dpif_ipfix *ipfix;
     struct hmap bundles;        /* Contains "struct ofbundle"s. */

@@ -27,6 +27,7 @@
 #include "flow.h"
 #include "openvswitch/meta-flow.h"
 #include "netflow.h"
+#include "netstream.h"
 #include "rstp.h"
 #include "smap.h"
 #include "sset.h"
@@ -328,6 +329,8 @@ void ofproto_set_dp_desc(struct ofproto *, const char *dp_desc);
 int ofproto_set_snoops(struct ofproto *, const struct sset *snoops);
 int ofproto_set_netflow(struct ofproto *,
                         const struct netflow_options *nf_options);
+int ofproto_set_netstream(struct ofproto *,
+                        const struct netstream_options *ns_options);
 int ofproto_set_sflow(struct ofproto *, const struct ofproto_sflow_options *);
 int ofproto_set_ipfix(struct ofproto *,
                       const struct ofproto_ipfix_bridge_exporter_options *,
@@ -503,6 +506,8 @@ bool ofproto_has_snoops(const struct ofproto *);
 void ofproto_get_snoops(const struct ofproto *, struct sset *);
 void ofproto_get_all_flows(struct ofproto *p, struct ds *);
 void ofproto_get_netflow_ids(const struct ofproto *,
+                             uint8_t *engine_type, uint8_t *engine_id);
+void ofproto_get_netstream_ids(const struct ofproto *,
                              uint8_t *engine_type, uint8_t *engine_id);
 
 void ofproto_get_ofproto_controller_info(const struct ofproto *, struct shash *);

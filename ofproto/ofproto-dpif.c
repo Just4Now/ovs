@@ -5110,6 +5110,40 @@ get_netflow_ids(const struct ofproto *ofproto_,
 
     dpif_get_netflow_ids(ofproto->backer->dpif, engine_type, engine_id);
 }
+
+/* NetStream. */
+
+static int
+set_netstream(struct ofproto *ofproto_,
+            const struct netstream_options *netstream_options)
+{
+    struct ofproto_dpif *ofproto = ofproto_dpif_cast(ofproto_);
+
+    if (netstream_options) {
+        if (!ofproto->netstream) {
+            ofproto->netstream = netstream_create();
+            ofproto->backer->need_revalidate = REV_RECONFIGURE;
+        }
+        return netflow_set_options(ofproto->netstream, netstream_options);
+    } else if (ofproto->netstream) {
+        ofproto->backer->need_revalidate = REV_RECONFIGURE;
+        netstream_unref(ofproto->netstream);
+        ofproto->netstream = NULL;
+    }
+
+    return 0;
+}
+
+static void
+get_netstream_ids(const struct ofproto *ofproto_,
+                uint8_t *engine_type, uint8_t *engine_id)
+{
+    struct ofproto_dpif *ofproto = ofproto_dpif_cast(ofproto_);
+
+    /* Netstream's engine_type and engine_id has the same meaning as NetFlow,
+       so we use dpif_get_netflow_ids to obtain them. */
+    dpif_get_netflow_ids(ofproto->backer->dpif, engine_type, engine_id);
+}
 
 struct ofproto_dpif *
 ofproto_dpif_lookup_by_name(const char *name)
@@ -6063,6 +6097,8 @@ const struct ofproto_class ofproto_dpif_class = {
     nxt_resume,
     set_netflow,
     get_netflow_ids,
+    set_netstream,
+    get_netstream_ids,
     set_sflow,
     set_ipfix,
     get_ipfix_stats,

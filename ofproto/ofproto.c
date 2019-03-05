@@ -816,6 +816,21 @@ ofproto_set_netflow(struct ofproto *ofproto,
 }
 
 int
+ofproto_set_netstream(struct ofproto *ofproto,
+                    const struct netstream_options *ns_options)
+{
+    if (ns_options && sset_is_empty(&ns_options->collectors)) {
+        ns_options = NULL;
+    }
+
+    if (ofproto->ofproto_class->set_netstream) {
+        return ofproto->ofproto_class->set_netstream(ofproto, ns_options);
+    } else {
+        return ns_options ? EOPNOTSUPP : 0;
+    }
+}
+
+int
 ofproto_set_sflow(struct ofproto *ofproto,
                   const struct ofproto_sflow_options *oso)
 {
@@ -4468,6 +4483,15 @@ ofproto_get_netflow_ids(const struct ofproto *ofproto,
                         uint8_t *engine_type, uint8_t *engine_id)
 {
     ofproto->ofproto_class->get_netflow_ids(ofproto, engine_type, engine_id);
+}
+
+/* Obtains the NetStream engine type and engine ID for 'ofproto' into
+ * '*engine_type' and '*engine_id', respectively. */
+void
+ofproto_get_netstream_ids(const struct ofproto *ofproto,
+                        uint8_t *engine_type, uint8_t *engine_id)
+{
+    ofproto->ofproto_class->get_netstream_ids(ofproto, engine_type, engine_id);
 }
 
 /* Checks the status change of CFM on 'ofport'.
