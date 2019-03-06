@@ -1650,6 +1650,10 @@ run(struct ofproto *ofproto_)
     if (ofproto->netflow) {
         netflow_run(ofproto->netflow);
     }
+    if (ofproto->netstream) {
+        netstream_run(ofproto->netstream);
+    }
+    
     if (ofproto->sflow) {
         dpif_sflow_run(ofproto->sflow);
     }
@@ -1745,6 +1749,9 @@ ofproto_dpif_wait(struct ofproto *ofproto_)
     if (ofproto->netflow) {
         netflow_wait(ofproto->netflow);
     }
+    if (ofproto->netstream) {
+        netstream_wait(ofproto->netstream);
+    } 
     ovs_rwlock_rdlock(&ofproto->ml->rwlock);
     mac_learning_wait(ofproto->ml);
     ovs_rwlock_unlock(&ofproto->ml->rwlock);
