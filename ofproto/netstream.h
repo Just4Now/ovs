@@ -4,7 +4,9 @@
 #include <stdint.h>
 #include "sset.h"
 
-#define MAX_PATH_LENGTH 64
+#define NS_MAX_BRIDGE_NAME_LENGTH 16
+#define NS_MAX_PATH_LENGTH 48
+#define NS_MAX_DB_PATH_LENGTH 64
 #define NS_SAMPLE_MODE_DEFAULT RANDOM_PACKETS
 #define NS_SAMPLE_VALUE_DEFAULT 100
 #define NS_INACTIVE_TIMEOUT_DEFAULT 30
@@ -12,6 +14,8 @@
 #define NS_FLOW_CACHE_NUMBER_DEFAULT 10240
 #define NS_SAVE_TO_LOCAL_DEFAULT false
 #define NS_TCP_FLAGS_DEFAULT false
+
+#define NS_DB_FILE_NAME "netstream.db"
 
 #define NETSTREAM_V5_VERSION 5
 
@@ -36,11 +40,12 @@ struct netstream_options {
     int active_timeout;
     int flow_cache_number;
     bool save_to_local;
-    char save_to_local_path[MAX_PATH_LENGTH];
+    char save_to_local_path[NS_MAX_PATH_LENGTH];
     bool tcp_flag;
 };
 
 struct netstream {
+    char bridge_name[NS_MAX_BRIDGE_NAME_LENGTH];
     uint8_t engine_type;          /* Value of engine_type to use. */
     uint8_t engine_id;            /* Value of engine_id to use. */
     uint64_t boot_time;           /* Time when netstream_create() was called. */
@@ -54,7 +59,7 @@ struct netstream {
     uint32_t sample_value;
 
     bool save_to_local;
-    char save_to_local_path[MAX_PATH_LENGTH];
+    char save_to_local_path[NS_MAX_PATH_LENGTH];
 
     uint64_t inactive_timeout; /* Timeout for flows that are expired. */ 
     uint64_t active_timeout; /* Timeout for flows that are still active. */
@@ -67,6 +72,8 @@ struct netstream {
     struct ofpbuf packet;         /* NetStream packet being accumulated. */
 
     struct hmap flows;            /* Contains 'netstream_flows'. */
+
+    
 
     struct ovs_refcount ref_cnt;
 };

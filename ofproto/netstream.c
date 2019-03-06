@@ -4,6 +4,7 @@
 
 #include "openvswitch/ofpbuf.h"
 #include "netstream.h"
+#include "sqlite3.h"
 
 VLOG_DEFINE_THIS_MODULE(netstream);
 
@@ -11,10 +12,11 @@ static struct ovs_mutex mutex = OVS_MUTEX_INITIALIZER;
 static atomic_count netstream_count = ATOMIC_COUNT_INIT(0);
 
 struct netstream *
-netstream_create(void)
+netstream_create(char *bridge_name)
 {
     struct netstream *ns = xzalloc(sizeof *ns);
 
+    strcpy(ns->bridge_name, bridge_name);
     ns->engine_type = 0;
     ns->engine_id = 0;
     ns->boot_time = time_msec();
@@ -44,7 +46,11 @@ netstream_set_options(struct netstream *ns,
     ns->sample_value = ns_options->sample_value;
     ns->save_to_local = ns_options->save_to_local;
     if (ns->save_to_local) {
-        strcpy(ns->save_to_local, ns_options->save_to_local);
+        /* netstream日志存储路径不一样时才需要重新新建数据库文件 */
+        if (strcmp(ns_optins->save_to_local_path, ns->save_to_local_path) != 0) {
+            strcpy(ns->save_to_local_path, ns_options->save_to_local_path);
+            netstream_create_database(ns);
+        }   
     }
     ns->flow_cache_number = ns_options->flow_cache_number;
     ns->tcp_flag = ns_options->tcp_flag;
@@ -57,7 +63,7 @@ netstream_set_options(struct netstream *ns,
     old_timeout = ns->active_timeout;
     ns->active_timeout = ns_options->inactive_timeout * 1000 * 60;
     if (old_timeout != ns->active_timeout) {
-        ns->reconsig_time = time_msec();
+        ns->reconfig_active_timeout = time_msec();
         ns->next_timeout = time_msec();
     }
     ovs_mutex_unlock(&mutex);
@@ -116,6 +122,8 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         /* 非活跃流老化 */
         if (now > ns_flow->used + ns->inactive_timeout) {
             netstream_expire__(ns, ns_flow, INACTIVE_FLOW);
+            
+            
             /* 将超时的非活跃流移除 */
             hmap_remove(&ns->flows, &ns_flow->hmap_node);
             free(ns_flow);
@@ -229,4 +237,59 @@ netstream_wait(struct netstream *ns) OVS_EXCLUDED(mutex)
         poll_immediate_wake();
     }
     ovs_mutex_unlock(&mutex);
+}
+
+void
+netstream_create_database(struct netstream *ns)
+    OVS_REQUIRES(mutex)
+{
+    char db_file_path[NS_MAX_DB_PATH_LENGTH];
+    sqlite3* db;
+    char *errmsg = NULL;
+    int rc;
+    char *sqlcmd;
+
+    db_file_name = NS_DB_FILE_NAME;
+    sprintf(db_file_path, "%s/%s", ns->save_to_local_path, NS_DB_FILE_NAME);
+    
+    rc = sqlite3_open(db_file_path, &db);
+    if (rc != SQLITE_OK) {
+        VLOG_ERR("Can't open netstream log database(%s), please" 
+                 "check if it is bad.(Error message:%s)", db_file_path，sqlite3_errmsg(db);
+        goto err_open;
+    }
+
+    sqlcmd = "CREATE TABLE NESTREAM("
+             "BRIDEG_NAME   CHAR(16),"
+             "SRC_IP        INTEGER,"
+             "DST_IP        INTEGER,"
+             "SRC_PORT      INTEGER,"
+             "DST_PORT      INTEGER,"
+             "PROTOCOL      INTEGER,"
+             "START_TIME    INTEGER,"
+             "END_TIME      INTEGER,"
+             "DURATION      INTEGER,"
+             "SRC_IP_PORT   CHAR(32),"
+             "DST_IP_PORT   CHAR(32),"
+             "S_TIME_READ   CHAR(32)"
+             "E_TIME_READ   CHAR(32)"
+             "INPUT         INTEGER,"
+             "OUTPUT        INTEGER,"
+             "PACKET_COUNT  INTEGER,"
+             "BYTE_COUNT    INTEGER,"
+             "TOS           INTEGER,"
+             "FLOW_TYPE     INTEGER);";
+
+    rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
+    if( rc != SQLITE_OK ){
+        VLOG_ERR("Can't create table netstream in %s."
+                 "(Error message:%s)", db_file_path, zErrMsg);
+        goto err_create;
+    }
+
+    err_create:
+    sqlite3_free(zErrMsg);
+    err_open:
+    sqlite3_close(db);
+    return;
 }

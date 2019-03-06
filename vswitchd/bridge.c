@@ -1182,7 +1182,7 @@ bridge_configure_netstream(struct bridge *br)
     struct netstream_options opts;
 
     if (!cfg) {
-        ofproto_set_netstream(br->ofproto, NULL);
+        ofproto_set_netstream(br->name, br->ofproto, NULL);
         return;
     }
 
@@ -1275,7 +1275,7 @@ bridge_configure_netstream(struct bridge *br)
     sset_add_array(&opts.collectors, cfg->targets, cfg->n_targets);
 
     /* Configure. */
-    if (ofproto_set_netstream(br->ofproto, &opts)) {
+    if (ofproto_set_netstream(br->name, br->ofproto, &opts)) {
         VLOG_ERR("bridge %s: problem setting netstream collectors", br->name);
     }
     sset_destroy(&opts.collectors);

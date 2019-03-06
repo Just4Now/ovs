@@ -5121,17 +5121,17 @@ get_netflow_ids(const struct ofproto *ofproto_,
 /* NetStream. */
 
 static int
-set_netstream(struct ofproto *ofproto_,
-            const struct netstream_options *netstream_options)
+set_netstream(char *bridge_name, struct ofproto *ofproto_,
+              const struct netstream_options *netstream_options)
 {
     struct ofproto_dpif *ofproto = ofproto_dpif_cast(ofproto_);
 
     if (netstream_options) {
         if (!ofproto->netstream) {
-            ofproto->netstream = netstream_create();
+            ofproto->netstream = netstream_create(bridge_name);
             ofproto->backer->need_revalidate = REV_RECONFIGURE;
         }
-        return netflow_set_options(ofproto->netstream, netstream_options);
+        return netstream_set_options(ofproto->netstream, netstream_options);
     } else if (ofproto->netstream) {
         ofproto->backer->need_revalidate = REV_RECONFIGURE;
         netstream_unref(ofproto->netstream);

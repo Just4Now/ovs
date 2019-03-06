@@ -329,8 +329,8 @@ void ofproto_set_dp_desc(struct ofproto *, const char *dp_desc);
 int ofproto_set_snoops(struct ofproto *, const struct sset *snoops);
 int ofproto_set_netflow(struct ofproto *,
                         const struct netflow_options *nf_options);
-int ofproto_set_netstream(struct ofproto *,
-                        const struct netstream_options *ns_options);
+int ofproto_set_netstream(char *bridge_name, struct ofproto *,
+                          const struct netstream_options *ns_options);
 int ofproto_set_sflow(struct ofproto *, const struct ofproto_sflow_options *);
 int ofproto_set_ipfix(struct ofproto *,
                       const struct ofproto_ipfix_bridge_exporter_options *,

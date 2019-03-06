@@ -816,15 +816,15 @@ ofproto_set_netflow(struct ofproto *ofproto,
 }
 
 int
-ofproto_set_netstream(struct ofproto *ofproto,
-                    const struct netstream_options *ns_options)
+ofproto_set_netstream(char *bridge_name, struct ofproto *ofproto,
+                      const struct netstream_options *ns_options)
 {
     if (ns_options && sset_is_empty(&ns_options->collectors)) {
         ns_options = NULL;
     }
 
     if (ofproto->ofproto_class->set_netstream) {
-        return ofproto->ofproto_class->set_netstream(ofproto, ns_options);
+        return ofproto->ofproto_class->set_netstream(bridge_name, ofproto, ns_options);
     } else {
         return ns_options ? EOPNOTSUPP : 0;
     }
