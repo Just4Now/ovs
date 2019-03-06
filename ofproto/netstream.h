@@ -43,7 +43,7 @@ struct netstream_options {
 struct netstream {
     uint8_t engine_type;          /* Value of engine_type to use. */
     uint8_t engine_id;            /* Value of engine_id to use. */
-    uint64_t boot_time;      /* Time when netstream_create() was called. */
+    uint64_t boot_time;           /* Time when netstream_create() was called. */
     struct collectors *collectors; /* NetStream collectors. */
     bool add_id_to_iface;         /* Put the 7 least significiant bits of
                                    * 'engine_id' into the most significant
@@ -95,7 +95,7 @@ struct netstream_flow {
 
 /* Every NetStream v5 message contains the header that follows.  This is
  * followed by up to thirty records that describe a terminating flow.
- * We only send a single record per NetFlow message.
+ * We only send a single record per NetStream message.
  */
 struct netstream_v5_header {
     uint16_t version;              /* NetStream version is 5. */

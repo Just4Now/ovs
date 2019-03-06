@@ -129,7 +129,7 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
 }
 
 static void
-netflow_expire__(struct netflow *ns, struct netflow_flow *ns_flow, enum FLOW_TYPE type)
+netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, enum FLOW_TYPE type)
     OVS_REQUIRES(mutex)
 {
     uint64_t pkts, bytes;
@@ -144,7 +144,7 @@ netflow_expire__(struct netflow *ns, struct netflow_flow *ns_flow, enum FLOW_TYP
         return;
     }
 
-    /* 生成netflow record */        
+    /* 生成netstream record */        
     gen_netstream_rec(ns, ns_flow, pkt_count, byte_count);
 
     /* Update flow tracking data. */
@@ -167,7 +167,7 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow,
         time_wall_timespec(&now);
 
         ns_hdr = ofpbuf_put_zeros(&ns->packet, sizeof *ns_hdr);
-        ns_hdr->version = htons(NETFLOW_V5_VERSION);
+        ns_hdr->version = htons(NETSTREAM_V5_VERSION);
         ns_hdr->count = htons(0);
         ns_hdr->sysuptime = htonl(time_msec() - ns->boot_time);
         ns_hdr->unix_secs = htonl(now.tv_sec);
@@ -179,7 +179,7 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow,
 
     ns_hdr = ns->packet.data;
     ns_hdr->count = htons(ntohs(ns_hdr->count) + 1);
-    ns_hdr->flow_seq = htonl(ns->netflow_cnt++);
+    ns_hdr->flow_seq = htonl(ns->netstream_cnt++);
 
     ns_rec = ofpbuf_put_zeros(&ns->packet, sizeof *ns_rec);
     ns_rec->src_addr = htonl(ns_flow->nw_src);
