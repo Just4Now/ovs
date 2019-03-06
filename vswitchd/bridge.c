@@ -1214,10 +1214,10 @@ bridge_configure_netstream(struct bridge *br)
     {
         opts.sample_mode = NS_SAMPLE_MODE_DEFAULT;
     }
-    /* sample_value */
-    opt.sample_value = NS_SAMPLE_VALUE_DEFAULT;
-    if (cfg->sample_value) {
-        opt.sample_value = cfg->sample_value;
+    /* sample_interval */
+    opt.sample_interval = NS_sample_interval_DEFAULT;
+    if (cfg->sample_interval) {
+        opt.sample_interval = cfg->sample_interval;
     }      
 
     /* Confugure inactive timeout interval */
@@ -1254,12 +1254,12 @@ bridge_configure_netstream(struct bridge *br)
     }
 
     /* Save to local and path*/
-    opt.save_to_local = cfg->save_to_local;
-    if (opt.save_to_local) {
+    opt.log = cfg->log;
+    if (opt.log) {
         /* check if the path exists */
-        strcpy(opt.save_to_local_path, "");
-        if (access(cfg->save_to_local_path, F_OK) != -1) {
-            strcpy(opt.save_to_local_path, cfg->save_to_local_path);
+        strcpy(opt.log_path, "");
+        if (access(cfg->log_path, F_OK) != -1) {
+            strcpy(opt.log_path, cfg->log_path);
         }else
         {
             VLOG_WARN("bridge %s: The netstream db saving path does not exist, "

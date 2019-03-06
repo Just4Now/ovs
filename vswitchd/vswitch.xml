@@ -5443,8 +5443,8 @@ ovs-vsctl add-port br0 p0 -- set Interface p0 type=patch options:peer=p1 \
       sample_mode
     </column>
 
-    <column name="sample_value">
-      sample_value
+    <column name="sample_interval">
+      sample_interval
     </column>
 
     <column name="inactive_timeout">
@@ -5459,12 +5459,12 @@ ovs-vsctl add-port br0 p0 -- set Interface p0 type=patch options:peer=p1 \
       flow_cache_number
     </column>
 
-    <column name="save_to_local">
-      save_to_local
+    <column name="log">
+      log
     </column>
 
-    <column name="save_to_local_path">
-      save_to_local_path
+    <column name="log_path">
+      log_path
     </column>
 
     <column name="tcp_flag">

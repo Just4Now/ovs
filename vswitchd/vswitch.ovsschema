@@ -501,7 +501,7 @@
          "type": {"key": {"type": "string",
                           "enum": ["set", ["fix_packets", "random_packets"]]},
                   "min": 0, "max": 1}},
-       "sample_value": {
+       "sample_interval": {
          "type": {"key": {"type": "integer",
                           "minInteger": 1, "maxInteger": 65535},
                   "min": 0, "max": 1}},
@@ -517,9 +517,9 @@
          "type": {"key": {"type": "integer",
                           "minInteger": 1, "maxInteger": 65535},
                   "min": 0, "max": 1}},
-       "save_to_local": {
+       "log": {
          "type": "boolean"},
-       "save_to_local_path": {
+       "log_path": {
          "type": {"key": {"type": "string"},
                   "min": 0, "max": 1}},
        "tcp_flag": {

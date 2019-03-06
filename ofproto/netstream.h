@@ -5,14 +5,16 @@
 #include "sset.h"
 
 #define NS_MAX_BRIDGE_NAME_LENGTH 16
-#define NS_MAX_PATH_LENGTH 48
+#define NS_MAX_PATH_LOG_LENGTH 48
 #define NS_MAX_DB_PATH_LENGTH 64
+#define NS_MAX_STRING_READABLE 32
+
 #define NS_SAMPLE_MODE_DEFAULT RANDOM_PACKETS
-#define NS_SAMPLE_VALUE_DEFAULT 100
+#define NS_sample_interval_DEFAULT 100
 #define NS_INACTIVE_TIMEOUT_DEFAULT 30
 #define NS_ACTIVE_TIMEOUT_DEFAULT 30
 #define NS_FLOW_CACHE_NUMBER_DEFAULT 10240
-#define NS_SAVE_TO_LOCAL_DEFAULT false
+#define NS_log_DEFAULT false
 #define NS_TCP_FLAGS_DEFAULT false
 
 #define NS_DB_FILE_NAME "netstream.db"
@@ -35,12 +37,12 @@ struct netstream_options {
     uint8_t engine_id;
     bool add_id_to_iface;
     enum SAMPLE_MODE sample_mode;
-    int sample_value;
+    int sample_interval;
     int inactive_timeout;
     int active_timeout;
     int flow_cache_number;
-    bool save_to_local;
-    char save_to_local_path[NS_MAX_PATH_LENGTH];
+    bool log;
+    char log_path[NS_MAX_PATH_LOG_LENGTH];
     bool tcp_flag;
 };
 
@@ -56,10 +58,10 @@ struct netstream {
     bool tcp_flag;
 
     enum SAMPLE_MODE sample_mode;
-    uint32_t sample_value;
+    uint32_t sample_interval;
 
-    bool save_to_local;
-    char save_to_local_path[NS_MAX_PATH_LENGTH];
+    bool log;
+    char log_path[NS_MAX_PATH_LOG_LENGTH];
 
     uint64_t inactive_timeout; /* Timeout for flows that are expired. */ 
     uint64_t active_timeout; /* Timeout for flows that are still active. */
@@ -149,6 +151,31 @@ struct netstream_v5_record {
     uint8_t  dst_mask;             /* Destination mask bits.  Set to 0. */
     uint8_t  pad[2];
 };
+
+struct netstream_db_record{
+    uint32_t src_ip;
+    uint32_t dst_ip;
+    uint16_t src_port;
+    uint16_t dst_port; 
+    uint16_t input;
+    uint16_t output;
+
+    uint32_t start_time;
+    uint32_t end_time;
+    uint32_t packet_count;
+    uint32_t byte_count;
+
+    char src_ip_port[NS_MAX_STRING_READABLE];
+    char dst_ip_port[NS_MAX_STRING_READABLE];
+    char s_time_read[NS_MAX_STRING_READABLE];
+    char e_time_read[NS_MAX_STRING_READABLE];
+    
+    uint32_t duration;
+    uint8_t protocol;
+    uint8_t ip_tos;
+    uint8_t flow_type;
+    uint8_t pad;
+}
 
 
 struct netstream *netstream_create(void);

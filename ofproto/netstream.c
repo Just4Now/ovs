@@ -43,12 +43,11 @@ netstream_set_options(struct netstream *ns,
     ns->engine_id = ns_options->engine_id;
     ns->add_id_to_iface = ns_options->add_id_to_iface;
     ns->sample_mode = ns_options->sample_mode;
-    ns->sample_value = ns_options->sample_value;
-    ns->save_to_local = ns_options->save_to_local;
-    if (ns->save_to_local) {
-        /* netstream日志存储路径不一样时才需要重新新建数据库文件 */
-        if (strcmp(ns_optins->save_to_local_path, ns->save_to_local_path) != 0) {
-            strcpy(ns->save_to_local_path, ns_options->save_to_local_path);
+    ns->sample_interval = ns_options->sample_interval;
+    ns->log = ns_options->log;
+    if (ns->log) {
+        if (strcmp(ns_optins->log_path, ns->log_path) != 0) {
+            strcpy(ns->log_path, ns_options->log_path);
             netstream_create_database(ns);
         }   
     }
@@ -105,6 +104,11 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
 {
     long long int now = time_msec();
     struct netstream_flow *ns_flow, *next;
+    char db_file_path[NS_MAX_DB_PATH_LENGTH];
+    sqlite3* db;
+    char *errmsg = NULL;
+    int rc;
+    char *sqlcmd;
 
     /* 发送已经累积的NetStream报文 */
     if (ns->packet.size) {
@@ -118,12 +122,26 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
 
     ns->next_timeout = now + 1000;
 
+    if (ns->log) {
+        sprintf(db_file_path, "%s/%s", ns->log_path, NS_DB_FILE_NAME);
+        rc = sqlite3_open(db_file_path, &db);
+        if (rc != SQLITE_OK) {
+            static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
+            VLOG_ERR_RL(&rl, "Can't open netstream log database(%s), please check "
+                         "if it is bad.(Error message:%s)", db_file_path，sqlite3_errmsg(db));
+        }else{
+            rc = sqlite3_exec(db, "BEGIN", 0, 0, &errmsg); //开启事务
+        }
+    }
+    
+
     HMAP_FOR_EACH_SAFE (ns_flow, next, hmap_node, &ns->flows) {
         /* 非活跃流老化 */
         if (now > ns_flow->used + ns->inactive_timeout) {
             netstream_expire__(ns, ns_flow, INACTIVE_FLOW);
-            
-            
+            if (ns->log) {
+                netstream_save_into_db(ns, &ns_db_record);
+            }
             /* 将超时的非活跃流移除 */
             hmap_remove(&ns->flows, &ns_flow->hmap_node);
             free(ns_flow);
@@ -131,9 +149,15 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         }
         /* 活跃流老化 */
         if (now > ns_flow->last_expired + ns->active_timeout) {
+            memset(ns_db_record, 0, sizeof ns_db_record);
             netstream_expire__(ns, ns_flow, ACTIVE_FLOW);
         }
     }
+
+    if (ns->log) {
+        rc = sqlite3_exec(db, "COMMIT", 0, 0, &errmsg); //提交事务
+    }
+    
 }
 
 static void
@@ -182,7 +206,7 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow,
         ns_hdr->unix_nsecs = htonl(now.tv_nsec);
         ns_hdr->engine_type = ns->engine_type;  //单字节不需要大小段转换
         ns_hdr->engine_id = ns->engine_id;
-        ns_hdr->sampling_interval = htonl(ns->sample_value);
+        ns_hdr->sampling_interval = htonl(ns->sample_interval);
     }
 
     ns_hdr = ns->packet.data;
@@ -249,8 +273,7 @@ netstream_create_database(struct netstream *ns)
     int rc;
     char *sqlcmd;
 
-    db_file_name = NS_DB_FILE_NAME;
-    sprintf(db_file_path, "%s/%s", ns->save_to_local_path, NS_DB_FILE_NAME);
+    sprintf(db_file_path, "%s/%s", ns->log_path, NS_DB_FILE_NAME);
     
     rc = sqlite3_open(db_file_path, &db);
     if (rc != SQLITE_OK) {
@@ -259,7 +282,7 @@ netstream_create_database(struct netstream *ns)
         goto err_open;
     }
 
-    sqlcmd = "CREATE TABLE NESTREAM("
+    sqlcmd = "CREATE TABLE IF NOT EXISTS NESTREAM("
              "BRIDEG_NAME   CHAR(16),"
              "SRC_IP        INTEGER,"
              "DST_IP        INTEGER,"
@@ -278,7 +301,7 @@ netstream_create_database(struct netstream *ns)
              "PACKET_COUNT  INTEGER,"
              "BYTE_COUNT    INTEGER,"
              "TOS           INTEGER,"
-             "FLOW_TYPE     INTEGER);";
+             "FLOW_TYPE     INTEGER);"
 
     rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
     if( rc != SQLITE_OK ){
@@ -292,4 +315,10 @@ netstream_create_database(struct netstream *ns)
     err_open:
     sqlite3_close(db);
     return;
+}
+
+void
+netstream_save_into_db(struct netstream *ns, struct netstream_db_record *ns_db_record)
+{
+
 }
