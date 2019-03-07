@@ -3,6 +3,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <stdlib.h>
 
 #include "openvswitch/ofpbuf.h"
 #include "netstream.h"
@@ -13,6 +14,16 @@ VLOG_DEFINE_THIS_MODULE(netstream);
 static struct ovs_mutex mutex = OVS_MUTEX_INITIALIZER;
 static atomic_count netstream_count = ATOMIC_COUNT_INIT(0);
 static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
+
+const char sql_index_name[] = {
+    "SRC_IP_INDEX", "SRC_IP",
+    "DST_IP_INDEX", "DST_IP",
+    "SRC_PORT_INDEX", "SRC_PORT"
+    "DST_PORT_INDEX", "DST_PORT"
+    "PROTOCOL_INDEX", "PROTOCOL"
+    "START_TIME_INDEX", "START_TIME"
+    "END_TIME_INDEX", "END_TIME"
+}
 
 struct netstream *
 netstream_create(char *bridge_name)
@@ -367,7 +378,7 @@ netstream_create_database(struct netstream *ns)
     sqlite3* db;
     char *errmsg = NULL;
     int rc;
-    char *sqlcmd;
+    char *sqlcmd = (char *)malloc(NS_MAX_SQL_CML_LENGTH);
 
     sprintf(db_file_path, "%s/%s-%s", ns->log_path, ns->bridge_name, NS_DB_FILE_NAME);
     
@@ -378,38 +389,68 @@ netstream_create_database(struct netstream *ns)
         goto err_open;
     }
 
-    sqlcmd = "CREATE TABLE IF NOT EXISTS NESTREAM("
-             "BRIDEG_NAME   CHAR(16),"
-             "SRC_IP        INTEGER,"
-             "DST_IP        INTEGER,"
-             "SRC_PORT      INTEGER,"
-             "DST_PORT      INTEGER,"
-             "PROTOCOL      INTEGER,"
-             "START_TIME    INTEGER,"
-             "END_TIME      INTEGER,"
-             "DURATION      INTEGER,"
-             "SRC_IP_PORT   CHAR(32),"
-             "DST_IP_PORT   CHAR(32),"
-             "S_TIME_READ   CHAR(32)"
-             "E_TIME_READ   CHAR(32)"
-             "INPUT         INTEGER,"
-             "OUTPUT        INTEGER,"
-             "PACKET_COUNT  INTEGER,"
-             "BYTE_COUNT    INTEGER,"
-             "TOS           INTEGER,"
-             "FLOW_TYPE     INTEGER);"
-
+    memset(sqlcmd, 0, sizeof sqlcmd);
+    sprintf(sqlcmd, \
+            "CREATE TABLE IF NOT EXISTS NESTREAM("
+            "BRIDEG_NAME   CHAR(16),"
+            "SRC_IP        INTEGER,"
+            "DST_IP        INTEGER,"
+            "SRC_PORT      INTEGER,"
+            "DST_PORT      INTEGER,"
+            "PROTOCOL      INTEGER,"
+            "START_TIME    INTEGER,"
+            "END_TIME      INTEGER,"
+            "DURATION      INTEGER,"
+            "SRC_IP_PORT   CHAR(32),"
+            "DST_IP_PORT   CHAR(32),"
+            "S_TIME_READ   CHAR(32)"
+            "E_TIME_READ   CHAR(32)"
+            "INPUT         INTEGER,"
+            "OUTPUT        INTEGER,"
+            "PACKET_COUNT  INTEGER,"
+            "BYTE_COUNT    INTEGER,"
+            "TOS           INTEGER,"
+            "FLOW_TYPE     INTEGER);");
     rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
     if( rc != SQLITE_OK ){
-        VLOG_ERR("Can't create table netstream in %s."
+        VLOG_ERR("Can't create main table netstream in %s."
                  "(Error message:%s)", db_file_path, zErrMsg);
         goto err_create;
+    }
+
+    for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
+    {
+        memset(sqlcmd, 0, sizeof sqlcmd);
+        sprintf(sqlcmd, \ 
+                "CREATE TABLE IF NOT EXISTS %s("
+                "VALUE INTEGER PRIMARY KEY,"
+                "COUNT INTEGER);", sql_index_name[i + 1]);
+        rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
+        if( rc != SQLITE_OK ){
+            VLOG_ERR("%s:Can't create subtable (%s).(Error message:%s)", \
+                     sql_index_name[i], db_file_path, zErrMsg);
+            goto err_create;
+        }
+    }
+
+    for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
+    {
+        memset(sqlcmd, 0, sizeof sqlcmd);
+        sprintf(sqlcmd, "CREATE INDEX %s IF NOT EXISTS ON NETSTREAM (%s);", \
+                sql_index_name[i], sql_index_name[i + 1]);
+        rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
+        if( rc != SQLITE_OK ){
+            VLOG_ERR("%s:Can't create index(%s) on netstream (%s).(Error message:%s)", \
+                     sql_index_name[i], db_file_path, zErrMsg);
+            goto err_create;
+        }
     }
 
     err_create:
     sqlite3_free(zErrMsg);
     err_open:
     sqlite3_close(db);
+    free(sqlcmd);
     return;
 }
 
@@ -478,63 +519,93 @@ static bool
 netstream_write_into_db(sqlite3 *db, struct netstream *ns)
 {
     /* sqlite 执行准备 */
-    sqlite3_stmt *stmt;
+    sqlite3_stmt *stmt_main_table;
+    sqlite3_stmt *stmt_sub_table[NS_SQL_TABLE_INDEX_NUM];
     int rc;
-    char *sql_cmd = "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);";
-    sqlite3_prepare(db, sql_cmd, strlen(sql_cmd), &stmt, 0);
+    char *sqlcmd = (char *)malloc(NS_MAX_SQL_CML_LENGTH);
 
-    struct netstream_db_record ns_db_record;
+    memset(sqlcmd, 0, sizeof sqlcmd);
+    sprintf(sql, "%s", "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
+    rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_main_table, 0);
+    if(rc != SQLITE_OK)
+    {
+        goto err_main;
+    }
 
-    while(netstream_db_dequeue(ns->ns_db_que, &ns_db_record){
-        sqlite3_reset(stmt);
-        sqlite3_bind_text(stmt, 1, ns->bridge_name, strlen(ns->bridge_name), NULL);
-        sqlite3_bind_int(stmt, 2, ns_db_record->src_ip);
-        sqlite3_bind_int(stmt, 3, ns_db_record->dst_ip);
-        sqlite3_bind_int(stmt, 4, ns_db_record->src_port);
-        sqlite3_bind_int(stmt, 5, ns_db_record->dst_port);
-        sqlite3_bind_int(stmt, 6, ns_db_record->protocol);
-        sqlite3_bind_int(stmt, 7, ns_db_record->start_time);
-        sqlite3_bind_int(stmt, 8, ns_db_record->end_time);
-        sqlite3_bind_int(stmt, 9, ns_db_record->duration);
-        sqlite3_bind_text(stmt, 10, ns_db_record->src_ip_port, strlen(ns_db_record->src_ip_port), NULL);
-        sqlite3_bind_text(stmt, 11, ns_db_record->dst_ip_port, strlen(ns_db_record->dst_ip_port), NULL);
-        sqlite3_bind_text(stmt, 12, ns_db_record->s_time_read, strlen(ns_db_record->s_time_read), NULL);
-        sqlite3_bind_text(stmt, 13, ns_db_record->e_time_read, strlen(ns_db_record->e_time_read), NULL);
-        sqlite3_bind_int(stmt, 14, ns_db_record->input);
-        sqlite3_bind_int(stmt, 15, ns_db_record->output);
-        sqlite3_bind_int(stmt, 16, ns_db_record->packet_count);
-        sqlite3_bind_int(stmt, 17, ns_db_record->byte_count);
-        sqlite3_bind_int(stmt, 18, ns_db_record->ip_tos);
-        sqlite3_bind_int(stmt, 19, ns_db_record->flow_type);
-
-        rc = sqlite3_step(stmt);
+    for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
+    {
+        memset(sqlcmd, 0, sizeof sqlcmd);
+        /* 如果在INSERT语句末尾指定了ON DUPLICATE KEY UPDATE，
+           如果插入行后会导致在一个UNIQUE索引或PRIMARY KEY中出现重复值，
+           则执行UPDATE；如果不会导致唯一值列重复的问题，则插入新行。 */
+        sprintf(sql, "INSERT INTO %s (VALUE,COUNT) VALUES(?,1) "
+                "ON DUPLICATE KEY UPDATE COUNT=COUNT+1;", sql_index_name[i]);
+        rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_sub_table[i], 0);
         if(rc != SQLITE_OK)
         {
-            sqlite3_finalize(stmt);
-            return false;
+            goto err_sub;
         }
+    }
+
+    struct netstream_db_record ns_db_record;
+    while(netstream_db_dequeue(ns->ns_db_que, &ns_db_record){
+        sqlite3_reset(stmt_main_table);
+        sqlite3_bind_text(stmt_main_table, 1, ns->bridge_name, strlen(ns->bridge_name), NULL);
+        sqlite3_bind_int(stmt_main_table, 2, ns_db_record->src_ip);
+        sqlite3_bind_int(stmt_main_table, 3, ns_db_record->dst_ip);
+        sqlite3_bind_int(stmt_main_table, 4, ns_db_record->src_port);
+        sqlite3_bind_int(stmt_main_table, 5, ns_db_record->dst_port);
+        sqlite3_bind_int(stmt_main_table, 6, ns_db_record->protocol);
+        sqlite3_bind_int(stmt_main_table, 7, ns_db_record->start_time);
+        sqlite3_bind_int(stmt_main_table, 8, ns_db_record->end_time);
+        sqlite3_bind_int(stmt_main_table, 9, ns_db_record->duration);
+        sqlite3_bind_text(stmt_main_table, 10, ns_db_record->src_ip_port, strlen(ns_db_record->src_ip_port), NULL);
+        sqlite3_bind_text(stmt_main_table, 11, ns_db_record->dst_ip_port, strlen(ns_db_record->dst_ip_port), NULL);
+        sqlite3_bind_text(stmt_main_table, 12, ns_db_record->s_time_read, strlen(ns_db_record->s_time_read), NULL);
+        sqlite3_bind_text(stmt_main_table, 13, ns_db_record->e_time_read, strlen(ns_db_record->e_time_read), NULL);
+        sqlite3_bind_int(stmt_main_table, 14, ns_db_record->input);
+        sqlite3_bind_int(stmt_main_table, 15, ns_db_record->output);
+        sqlite3_bind_int(stmt_main_table, 16, ns_db_record->packet_count);
+        sqlite3_bind_int(stmt_main_table, 17, ns_db_record->byte_count);
+        sqlite3_bind_int(stmt_main_table, 18, ns_db_record->ip_tos);
+        sqlite3_bind_int(stmt_main_table, 19, ns_db_record->flow_type);
+        rc = sqlite3_step(stmt_main_table);
+        if(rc != SQLITE_OK)
+        {
+            goto err_main;
+        }
+
+        sqlite3_bind_int(stmt_sub_table[0], 1, ns_db_record->src_ip);
+        sqlite3_bind_int(stmt_sub_table[1], 1, ns_db_record->dst_ip);
+        sqlite3_bind_int(stmt_sub_table[2], 1, ns_db_record->src_port);
+        sqlite3_bind_int(stmt_sub_table[3], 1, ns_db_record->dst_port);
+        sqlite3_bind_int(stmt_sub_table[4], 1, ns_db_record->protocol);
+        sqlite3_bind_int(stmt_sub_table[5], 1, ns_db_record->start_time);
+        sqlite3_bind_int(stmt_sub_table[6], 1, ns_db_record->start_time);
+        for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
+        {
+            rc = sqlite3_step(stmt_sub_table[i]);
+            if(rc != SQLITE_OK)
+            {
+                goto err_sub;
+            }
+        }
+
         memset(&ns_db_record, 0, sizeof ns_db_record);
     }
-    sqlite3_finalize(stmt);
-    return true;
-}
 
-"BRIDEG_NAME   CHAR(16),"
-             "SRC_IP        INTEGER,"
-             "DST_IP        INTEGER,"
-             "SRC_PORT      INTEGER,"
-             "DST_PORT      INTEGER,"
-             "PROTOCOL      INTEGER,"
-             "START_TIME    INTEGER,"
-             "END_TIME      INTEGER,"
-             "DURATION      INTEGER,"
-             "SRC_IP_PORT   CHAR(32),"
-             "DST_IP_PORT   CHAR(32),"
-             "S_TIME_READ   CHAR(32)"
-             "E_TIME_READ   CHAR(32)"
-             "INPUT         INTEGER,"
-             "OUTPUT        INTEGER,"
-             "PACKET_COUNT  INTEGER,"
-             "BYTE_COUNT    INTEGER,"
-             "TOS           INTEGER,"
-             "FLOW_TYPE     INTEGER);"
+    sqlite3_finalize(stmt_main_table);
+    return true;
+
+    err_main:
+    sqlite3_finalize(stmt_main_table);
+    return false;
+
+    err_sub:
+    sqlite3_finalize(stmt_main_table);
+    for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
+    {
+        sqlite3_finalize(stmt_sub_table[i]);
+    }
+    return false;
+}
