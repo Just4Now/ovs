@@ -8,6 +8,9 @@
 #define NS_MAX_PATH_LOG_LENGTH 48
 #define NS_MAX_DB_PATH_LENGTH 64
 #define NS_MAX_STRING_READABLE 32
+#define NS_TCP 6
+#define NS_UDP 17
+#define NS_DB_INVALID_NODE_IDX -1
 
 #define NS_SAMPLE_MODE_DEFAULT RANDOM_PACKETS
 #define NS_sample_interval_DEFAULT 100
@@ -62,6 +65,7 @@ struct netstream {
 
     bool log;
     char log_path[NS_MAX_PATH_LOG_LENGTH];
+    struct netsteam_db_queue ns_db_que;
 
     uint64_t inactive_timeout; /* Timeout for flows that are expired. */ 
     uint64_t active_timeout; /* Timeout for flows that are still active. */
@@ -160,8 +164,8 @@ struct netstream_db_record{
     uint16_t input;
     uint16_t output;
 
-    uint32_t start_time;
-    uint32_t end_time;
+    uint64_t start_time;
+    uint64_t end_time;
     uint32_t packet_count;
     uint32_t byte_count;
 
@@ -175,6 +179,13 @@ struct netstream_db_record{
     uint8_t ip_tos;
     uint8_t flow_type;
     uint8_t pad;
+}
+
+struct netstream_db_queue{
+    uint32_t front;
+    uint32_t rear;
+    uint32_t maxlength;
+    struct netstream_db_record *ns_db_node;
 }
 
 
