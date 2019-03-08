@@ -4,10 +4,14 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include "openvswitch/ofpbuf.h"
 #include "netstream.h"
 #include "sqlite3.h"
+#include "dirs.h"
+
 
 VLOG_DEFINE_THIS_MODULE(netstream);
 
@@ -74,17 +78,15 @@ netstream_set_options(struct netstream *ns,
     if (ns->log != old_log) {
         if(ns->log)
         {
-            netstream_db_createque(&ns->ns_db_que, ns->flow_cache_number);
+            netstream_log_path_init(ns);
+            if (ns->log) {
+                netstream_db_createque(&ns->ns_db_que, ns->flow_cache_number);
+            }
         }
         else 
         {
             netstream_db_destroyque(&ns->ns_db_que);   
         }
-    }
-    /* 改变了存储日志路径需要重新生成数据库 */
-    if (ns->log && strcmp(ns_optins->log_path, ns->log_path) != 0) {
-        strcpy(ns->log_path, ns_options->log_path);
-        netstream_create_database(ns);
     }
 
     collectors_destroy(ns->collectors);
@@ -370,7 +372,7 @@ netstream_wait(struct netstream *ns) OVS_EXCLUDED(mutex)
     ovs_mutex_unlock(&mutex);
 }
 
-void
+static void
 netstream_create_database(struct netstream *ns)
     OVS_REQUIRES(mutex)
 {
@@ -608,4 +610,24 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
         sqlite3_finalize(stmt_sub_table[i]);
     }
     return false;
+}
+
+void
+netstream_log_path_init(struct netstream *ns)
+{
+    char ns_log_dir[NS_MAX_PATH_LOG_LENGTH] = {0}; 
+    sprintf(ns_log_dir, "%s/NetStream", ovs_pkgdatadir());  /* /usr/local/share/openvswitch */
+    
+    /* 文件夹不存在时则创建该目录 */
+    if(access(ns_log_dir, F_OK) != 0)  
+    {  
+        if(mkdir(ns_log_dir, NS_LOG_DIR_MODE) != 0)  
+        {
+            VLOG_ERR("%s:Can't create netstream log path(%s)", ns_log_dir);
+            ns->log = false;
+            return;   
+        } 
+    }
+    strcpy(ns->log_path, ns_log_dir);
+    return;
 }

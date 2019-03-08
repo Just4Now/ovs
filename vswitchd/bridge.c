@@ -1255,17 +1255,6 @@ bridge_configure_netstream(struct bridge *br)
 
     /* Save to local and path*/
     opt.log = cfg->log;
-    if (opt.log) {
-        /* check if the path exists */
-        strcpy(opt.log_path, "");
-        if (access(cfg->log_path, F_OK) != -1) {
-            strcpy(opt.log_path, cfg->log_path);
-        }else
-        {
-            VLOG_WARN("bridge %s: The netstream db saving path does not exist, "
-                      "using default path:%s instead.", br->name, "");
-        }    
-    }
 
     /* TCP Flags */
     opt.tcp_flag = cfg->tcp_flag;
