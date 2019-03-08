@@ -609,6 +609,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     {
         sqlite3_finalize(stmt_sub_table[i]);
     }
+    free(sqlcmd);
     return false;
 }
 
