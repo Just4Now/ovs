@@ -6,30 +6,56 @@
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <time.h>
+#include <dirent.h>
+#include <unistd.h>
 
-//#include "sqlite3.h"
+#include "sqlite3.h"
+#include "vlog.h"
 
 #define NS_MAX_QUERY_CONDITION 8
+#define NS_MAX_INDEX_LENGTH 8
 #define NS_MAX_ARG_LENGTH 24
 #define NS_MAX_BRIDGE_NAME_LENGTH 16
+#define NS_MAX_PATH_LOG_LENGTH 48
+#define NS_MAX_QUERY_ROW 72
+#define NS_MAX_VALUE_LENGTH 32
+#define NS_MAX_SQL_CMD_LENGTH 512
 
 struct query_single_cond
 {
-    char br_name[NS_MAX_BRIDGE_NAME_LENGTH];
-    uint32_t src_ip;
-    uint32_t dst_ip;
-    uint16_t src_port;
-    uint16_t dst_port; 
-    uint8_t protocol;
-    uint64_t start_time;
-    uint64_t end_time;
+    bool is_specified;
+    char value[NS_MAX_VALUE_LENGTH];
 };
 
 struct query_conditions
 {
-    bool is_specified[NS_MAX_QUERY_CONDITION];
-    struct query_single_cond q_s_cond;
+    bool verbose;
+    bool is_specified;
+    bool cond_br_only;
+    struct query_single_cond q_s_cond[NS_MAX_QUERY_CONDITION];
 };
+
+const char *condition_name = {
+    "BRI_NAME",
+    "SRC_IP",
+    "DST_IP",
+    "SRC_IP",
+    "DST_IP",
+    "PROTOCOL",
+    "START_TIME",
+    "END_TIME"
+}
+
+const char *index_name = {
+    "",
+    "SRC_IP_INDEX",
+    "DST_IP_INDEX",
+    "SRC_IP_INDEX",
+    "DST_IP_INDEX",
+    "PROTOCOL_INDEX",
+    "START_TIME_INDEX",
+    "END_TIME_INDEX"
+}
 
 enum OPTION{
     BR_NAME,
@@ -39,7 +65,9 @@ enum OPTION{
     DST_PORT,
     PROTOCOL,
     START_TIME,
-    END_TIME
+    END_TIME,
+    HELP,
+    VERBOSE
 };
 
 static void nsquery_usage();
@@ -49,11 +77,13 @@ static bool ns_str2uint8(char *, uint8_t *);
 static bool ns_str2timestamp(char *, uint64_t *);
 static bool ns_check_time(struct query_conditions *);
 static void ns_query_database(struct query_conditions *);
-static void parser_options(int , char **, struct query_conditions *);
+static void parser_commands(int , char **, struct query_conditions *);
 
-static const char short_options[] = "h";
+char* const short_options = "";
+
 static const struct option long_options[] = {
-    { "help", no_argument, NULL, 'h' },
+    { "help", no_argument, NULL,  HELP},
+    { "verbose", no_argument, NULL,  VERBOSE},
     { "br-name", required_argument, NULL,  BR_NAME},
     { "src-ip", required_argument, NULL,  SRC_IP},
     { "dst-ip", required_argument, NULL,  DST_IP},
@@ -70,7 +100,7 @@ int main(int argc, char **argv)
     struct query_conditions q_c;
     memset(&q_c, 0, sizeof q_c);
     
-    parser_options(argc, argv, &q_c);
+    parser_commands(argc, argv, &q_c);
 
     ns_query_database(&q_c);
 
@@ -114,26 +144,39 @@ nsquery_usage()
            "    # ovs-nsquery --br-name=s1\n"
            "    # ovs-nsquery --src-ip=10.0.0.1 --dst-ip=20.0.0.1 --src-port=12 --dst-port=63\n"
            "    # ovs-nsquery --start-time=\"2018-01-01 00:00:00\" --end-time=\"2018-01-01 24:00:00\"\n"
-           "    # ovs-nsquery --protocol=6\n");     
+           "    # ovs-nsquery --protocol=6 --verbose\n");     
     printf("\nOther options:\n"
-           "  -h, --help                  display this help message\n");
-    exit(EXIT_SUCCESS);
+           "  --help                  display this help message\n"
+           "  --verbose               display the streams in more details");
 }
 
-static void parser_options(int argc, char **argv, struct query_conditions *q_c)
+static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
 {
     char c;
     uint16_t port;
     uint8_t protocol;
     uint64_t timestamp;
+    int longindex = NS_MAX_QUERY_CONDITION + 2;
 
-    while((c = getopt_long (argc, argv, short_options, long_options, NULL)) != -1){
+    do{
+        c = getopt_long (argc, argv, short_options, long_options, &longindex);
+
+        if (longindex > NS_MAX_QUERY_CONDITION) {
+            printf("unknown command; use --help for help\n");
+            exit(EXIT_FAILURE);
+        }
+        
+        if (c == -1) {
+            break;
+        }
+         
         switch (c)
         {
             struct in_addr addr;
-            case 'h':
+            case HELP:
                 if (argc == 2) {
                     nsquery_usage();
+                    exit(EXIT_SUCCESS);
                 }else
                 {
                     printf("if you want to konw the usage of ovs-nsquery, "
@@ -141,14 +184,19 @@ static void parser_options(int argc, char **argv, struct query_conditions *q_c)
                     exit(EXIT_FAILURE);
                 }
                 break;
+            case VERBOSE:
+                q_c->verbose = true;
+                break;
             case BR_NAME:
-                q_c->is_specified[BR_NAME] = true;
-                memcpy(q_c->q_s_cond.br_name, optarg, strlen(optarg));
+                q_c->q_s_cond[BR_NAME].is_specified = true;
+                q_c->cond_br_only = true;
+                strcpy(q_c->q_s_cond[BR_NAME].value, optarg);
                 break;
             case SRC_IP:
                 if (nsquery_check_ip(optarg, &addr)) {
-                    q_c->is_specified[SRC_IP] = true;
-                    q_c->q_s_cond.src_ip = (uint32_t)addr.s_addr;
+                    q_c->q_s_cond[SRC_IP].is_specified = true;
+                    q_c->cond_br_only = false;
+                    sprintf(q_c->q_s_cond[SRC_IP].value, "%u", (uint32_t)addr.s_addr);
                 }else
                 {
                     printf("Invalid source ip addresss:%s.\n", optarg);
@@ -157,8 +205,9 @@ static void parser_options(int argc, char **argv, struct query_conditions *q_c)
                 break;
             case DST_IP:
                 if (nsquery_check_ip(optarg, &addr)) {
-                    q_c->is_specified[DST_IP] = true;
-                    q_c->q_s_cond.dst_ip = (uint32_t)addr.s_addr;
+                    q_c->q_s_cond[DST_IP].is_specified = true;
+                    q_c->cond_br_only = false;
+                    sprintf(q_c->q_s_cond[DST_IP].value, "%u", (uint32_t)addr.s_addr);
                 }else
                 {
                     printf("Invalid destination ip addresss:%s.\n", optarg);
@@ -168,8 +217,9 @@ static void parser_options(int argc, char **argv, struct query_conditions *q_c)
             case SRC_PORT:
                 if (ns_str2uint16(optarg, &port)) {
                     if (port >=0 && port <= 65535) {
-                        q_c->is_specified[SRC_PORT] = true;
-                        q_c->q_s_cond.src_port = port;
+                        q_c->q_s_cond[SRC_PORT].is_specified = true;
+                        q_c->cond_br_only = false;
+                        sprintf(q_c->q_s_cond[SRC_PORT].value, "%u", port);
                     }else
                     {
                         printf("The port number(%u) is out of range.(0 to 65535 is valid)\n", port);
@@ -184,8 +234,9 @@ static void parser_options(int argc, char **argv, struct query_conditions *q_c)
             case DST_PORT:
                 if (ns_str2uint16(optarg, &port)) {
                     if (port >=0 && port <= 65535) {
-                        q_c->is_specified[DST_PORT] = true;
-                        q_c->q_s_cond.dst_port = port;
+                        q_c->q_s_cond[DST_PORT].is_specified = true;
+                        q_c->cond_br_only = false;
+                        sprintf(q_c->q_s_cond[DST_PORT].value, "%u", port);
                     }else
                     {
                         printf("The port number(%u) is out of range.(0 to 65535 is valid)\n", port);
@@ -200,8 +251,9 @@ static void parser_options(int argc, char **argv, struct query_conditions *q_c)
             case PROTOCOL:
                 if (ns_str2uint8(optarg, &protocol)) {
                     if (protocol >=0 && protocol <= 255) {
-                        q_c->is_specified[PROTOCOL] = true;
-                        q_c->q_s_cond.protocol = protocol;
+                        q_c->q_s_cond[PROTOCOL].is_specified = true;
+                        q_c->cond_br_only = false;
+                        sprintf(q_c->q_s_cond[SRC_PORT].value, "%u", protocol);
                     }else
                     {
                         printf("The protocol number(%u) is out of range.(0 to 255 is valid)\n", protocol);
@@ -216,8 +268,9 @@ static void parser_options(int argc, char **argv, struct query_conditions *q_c)
             case START_TIME:
                 if(ns_str2timestamp(optarg, &timestamp))
                 {
-                    q_c->is_specified[START_TIME] = true;
-                    q_c->q_s_cond.start_time = timestamp;
+                    q_c->q_s_cond[START_TIME].is_specified = true;
+                    q_c->cond_br_only = false;
+                    sprintf(q_c->q_s_cond[START_TIME].value, "%u", timestamp);
                 }else
                 {
                     printf("Invalid start time(%s).\n", optarg);
@@ -227,8 +280,9 @@ static void parser_options(int argc, char **argv, struct query_conditions *q_c)
             case END_TIME:
                 if(ns_str2timestamp(optarg, &timestamp))
                 {
-                    q_c->is_specified[END_TIME] = true;
-                    q_c->q_s_cond.end_time = timestamp;
+                    q_c->q_s_cond[END_TIME].is_specified = true;
+                    q_c->cond_br_only = false;
+                    sprintf(q_c->q_s_cond[END_TIME].value, "%u", timestamp);
                 }else
                 {
                     printf("Invalid end time(%s).\n", optarg);
@@ -236,11 +290,11 @@ static void parser_options(int argc, char **argv, struct query_conditions *q_c)
                 }
                 break;
             default:
-                printf("invalid condition name(%s); use --help for help\n", optarg);
                 exit(EXIT_FAILURE);
                 break;
         }
-    }
+    } while(true); 
+
 
     if (!ns_check_time(q_c)) {
         printf("The start time must be earlier than the end time.\n");
@@ -306,8 +360,8 @@ ns_str2timestamp(char *str_timestamp, uint64_t *timestamp)
 static bool
 ns_check_time(struct query_conditions *q_c)
 {
-    if (q_c->is_specified[START_TIME] && q_c->is_specified[END_TIME]) {
-        if (q_c->q_s_cond.start_time > q_c->q_s_cond.end_time) {
+    if (q_c->q_s_cond[].is_specified[START_TIME] && q_c->q_s_cond[].is_specified[END_TIME]) {
+        if (q_c->q_s_cond[].start_time > q_c->q_s_cond[].end_time) {
             return false;
         }
         return true;
@@ -318,5 +372,198 @@ ns_check_time(struct query_conditions *q_c)
 static void
 ns_query_database(struct query_conditions *q_c)
 {
+    char ns_log_dir_path[NS_MAX_PATH_LOG_LENGTH] = {0}; 
+    char ns_log_file_path[NS_MAX_PATH_LOG_LENGTH] = {0};
+    char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
+    bool q_s_cond[].is_specified = false;
+    sqlite3 *db;
+    int n_stable = 0;
+
+    DIR *ns_dir;   //描述一个打开的文件夹
+    struct dirent *ns_ptr;
+
+    memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
     
+    sprintf(ns_log_dir_path, "%s/NetStream", ovs_pkgdatadir());  /* /usr/local/share/openvswitch */
+
+    if ((ns_dir = opendir(ns_log_dir_path)) == NULL)
+    {
+        printf("Open directory(%s) error\n", ns_log_dir_path);
+        exit(EXIT_FAILURE);
+    }
+
+    if (q_c->verbose) {
+        n_stable += sprintf(sqlcmd, "SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,"
+                "S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT,"
+                "TOS,FLOW_TYPE FROM NETSTREAM ");
+    }else
+    {
+        n_stable += sprintf(sqlcmd, "SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,"
+                "INPUT,PACKET_COUNT,TOS FROM NETSTREAM ");
+    }
+
+    for(size_t i = 0; i < NS_MAX_QUERY_CONDITION; i++)
+    {
+        if (q_c.q_s_cond[i].is_specified) {
+            q_c.is_specified = true;
+            break;
+        }
+    }
+
+    while ((ns_ptr = readdir(ns_dir)) != NULL)
+    {
+        int n = n_stable;
+        if(strstr(ns_ptr->d_name, "-netstream.db") != NULL){
+            sprintf(ns_log_file_path, "%s/%s", ns_log_dir_path, ns_ptr->d_name);
+            rc = sqlite3_open(ns_log_file_path, &db);
+            if (rc != SQLITE_OK) {
+                VLOG_ERR("Can't open netstream log database(%s), please" 
+                         "check if it is bad.(Error message:%s)", \
+                         ns_log_file_path, sqlite3_errmsg(db);
+                sqlite3_close(db);
+                continue;
+            }else
+            {   
+                if (q_c.is_specified) {
+                    /* 如果查询条件只有bridge name将不会查找最佳索引，因为没有为BRI_NAME设置索引 */
+                    if (!q_c.cond_br_only) {
+                        char best_index[NS_MAX_INDEX_LENGTH];
+                        if(ns_query_find_best_index(db, q_c, best_index))
+                        {
+                            n += sprintf(sqlcmd + n, "INDEXED BY %s ", best_index);
+                        }else
+                        {
+                            continue;
+                        }
+                        
+                    }
+                    bool first_flag = true;
+                    for(size_t i = 0; i < NS_MAX_QUERY_CONDITION; i++)
+                    {
+                        if (q_c->q_s_cond[i].is_specified) {
+                            if (first_flag) {
+                                strcat(sqlcmd, "WHERE ");
+                            }else
+                            {
+                                strcat(sqlcmd, " AND ");
+                                first_flag = false;
+                            }
+                            strcat(sqlcmd, condition_name[i]);
+                            /* 找包含于输入起始、终止时间之间的流 */
+                            if (i == START_TIME) {
+                                strcat(sqlcmd, " >= ");
+                            }else if (i == END_TIME)
+                            {
+                                strcat(sqlcmd, " <= ");
+                            }else
+                            {
+                                strcat(sqlcmd, " = ");
+                            }
+                            strcat(sqlcmd, q_c->q_s_cond[i].value);
+                        }                       
+                    }
+                }   
+                ns_query_get_table(db, sqlcmd);
+            }    
+        }else
+        {
+            continue;
+        }    
+    }
+    closedir(ns_dir);
+    free(sqlcmd);
+}
+
+/* 查找辅助表以count值越少越好为标准 */
+static bool
+ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_index)
+{
+    int rc;
+    int n_row;
+    int n_column;
+    char *err_msg;
+    char **result;
+    char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
+    size_t best_i = 0
+    uint64_t count = 0;
+    uint64_t best_count = INT64_MAX;
+
+    memset(index, 0, NS_MAX_INDEX_LENGTH);
+
+    for(size_t i = 1; i < NS_MAX_QUERY_CONDITION; i++)
+    {
+        if (q_c->q_s_cond[i].is_specified) {
+            int n = 0;
+            memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
+            n += sprintf(sqlcmd, "SELECT COUNT FROM %s WHERE VALUE ", condition_name[i]);
+            /* 找包含于输入起始、终止时间之间的流 */
+            if (i == START_TIME) {
+                strcat(sqlcmd, " >= ");
+            }else if (i == END_TIME)
+            {
+                strcat(sqlcmd, " <= ");
+            }else
+            {
+                strcat(sqlcmd, " = ");
+            }
+            n += sprintf(sqlcmd, "%s;", q_c->q_s_cond[i].value);
+
+            rc = sqlite3_get_table(db, sqlcmd, &result, &n_row, &n_column, &err_msg);
+            if (rc != SQLITE_OK) {
+                VLOG_ERR("Find best index error(Error message:%s)." ,errmsg);
+                free(sqlcmd);
+                sqlite3_free(errmsg);
+                return false;
+            }else
+            {
+                if (n_row == 0) {
+                    best_i = i;
+                    break;
+                }
+                
+                sscanf(result[1], "%u", &count);
+                
+                if (count < bestcount) {
+                    bestcount = count;
+                    best_i = i;
+                }
+                
+            }
+        }
+    }
+    strcpy(best_index, index_name[best_i]);
+    sqlite3_free_table(result);
+    free(sqlcmd);
+    return true;
+}
+
+static bool
+ns_query_get_table(sqlite3 *db, char *sqlcmd)
+{
+    int rc;
+    int n_row;
+    int n_column;
+    char *err_msg;
+    char **result;
+    uint32_t query_offset = 0;
+    char *sqlcmd_tmp = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
+
+    /* LIMIT [no of rows] OFFSET [row num] */
+
+    /* more效果 limit offset限制*/
+    do
+    {
+        memset(sqlcmd_tmp, 0, NS_MAX_SQL_CMD_LENGTH);
+        sprintf("%s LIMIT %u OFFSET %u;", NS_MAX_SQL_CMD_LENGTH, query_offset);
+        rc = sqlite3_get_table(db, sqlcmd, &dbresult, &n_row, &n_column, &err_msg);
+        if (rc != SQLITE_OK) {
+            VLOG_ERR("Find best index error(Error message:%s)." ,errmsg);
+            sqlite3_free(errmsg);
+            free(sqlcmd_tmp);
+            return;
+        }
+
+        query_offset += NS_MAX_QUERY_ROW;
+    } while (n_row != 0);
+    free(sqlcmd_tmp);
 }

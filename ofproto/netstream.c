@@ -11,6 +11,7 @@
 #include "netstream.h"
 #include "sqlite3.h"
 #include "dirs.h"
+#include "vlog.h"
 
 
 VLOG_DEFINE_THIS_MODULE(netstream);
@@ -387,7 +388,7 @@ netstream_create_database(struct netstream *ns)
     rc = sqlite3_open(db_file_path, &db);
     if (rc != SQLITE_OK) {
         VLOG_ERR("Can't open netstream log database(%s), please" 
-                 "check if it is bad.(Error message:%s)", db_file_path，sqlite3_errmsg(db);
+                 "check if it is bad.(Error message:%s)", db_file_path, sqlite3_errmsg(db);
         goto err_open;
     }
 
@@ -524,7 +525,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     sqlite3_stmt *stmt_main_table;
     sqlite3_stmt *stmt_sub_table[NS_SQL_TABLE_INDEX_NUM];
     int rc;
-    char *sqlcmd = (char *)malloc(NS_MAX_SQL_CML_LENGTH);
+    char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
 
     memset(sqlcmd, 0, sizeof sqlcmd);
     sprintf(sql, "%s", "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
