@@ -429,16 +429,16 @@ ns_query_database(struct query_conditions *q_c)
             sprintf(ns_log_file_path, "%s/%s", ns_log_dir_path, ns_ptr->d_name);
             rc = sqlite3_open(ns_log_file_path, &db);
             if (rc != SQLITE_OK) {
-                VLOG_ERR("Can't open netstream log database(%s), please" 
+                printf("Can't open netstream log database(%s), please" 
                          "check if it is bad.(Error message:%s)", \
-                         ns_log_file_path, sqlite3_errmsg(db);
+                         ns_log_file_path, sqlite3_errmsg(db));
                 sqlite3_close(db);
                 continue;
             }else
             {   
-                if (q_c.is_specified) {
+                if (q_c->is_specified) {
                     /* 如果查询条件只有bridge name将不会查找最佳索引，因为没有为BRI_NAME设置索引 */
-                    if (!q_c.cond_br_only) {
+                    if (!q_c->cond_br_only) {
                         char best_index[NS_MAX_INDEX_LENGTH];
                         if(ns_query_find_best_index(db, q_c, best_index))
                         {
@@ -496,11 +496,9 @@ ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_i
     char *err_msg;
     char **result;
     char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
-    size_t best_i = 0
+    size_t best_i = 0;
     uint64_t count = 0;
     uint64_t best_count = INT64_MAX;
-
-    memset(index, 0, NS_MAX_INDEX_LENGTH);
 
     for(size_t i = 1; i < NS_MAX_QUERY_CONDITION; i++)
     {
@@ -522,9 +520,9 @@ ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_i
 
             rc = sqlite3_get_table(db, sqlcmd, &result, &n_row, &n_column, &err_msg);
             if (rc != SQLITE_OK) {
-                VLOG_ERR("Find best index error(Error message:%s)." ,errmsg);
+                printf("Find best index error(Error message:%s)." ,err_msg);
                 free(sqlcmd);
-                sqlite3_free(errmsg);
+                sqlite3_free(err_msg);
                 return false;
             }else
             {
@@ -535,8 +533,8 @@ ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_i
                 
                 sscanf(result[1], "%u", &count);
                 
-                if (count < bestcount) {
-                    bestcount = count;
+                if (count < best_count) {
+                    best_count = count;
                     best_i = i;
                 }
                 
@@ -564,7 +562,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
    
     if (tcgetattr(0, &init_setting) != 0)
     {
-        VLOG_ERR("Cannot get the attribution of the terminal.");
+        printf("Cannot get the attribution of the terminal.");
         goto quit;
     }
     memcpy(&new_setting, &init_setting, sizeof(struct termios));
@@ -573,7 +571,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
 
     if (tcsetattr(0, TCSANOW, &new_setting) != 0)
     {
-        VLOG_ERR("Cannot set the attribution of the terminal.");
+        printf("Cannot set the attribution of the terminal.");
         goto quit;
     }
 
@@ -587,8 +585,8 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
         sprintf("%s LIMIT %d OFFSET %d;", NS_MAX_SQL_CMD_LENGTH, query_offset);
         rc = sqlite3_get_table(db, sqlcmd, &result, &n_row, &n_column, &err_msg);
         if (rc != SQLITE_OK) {
-            VLOG_ERR("Find best index error(Error message:%s)." ,errmsg);
-            sqlite3_free(errmsg);
+            printf("Find best index error(Error message:%s)." ,err_msg);
+            sqlite3_free(err_msg);
             free(sqlcmd_tmp);
             return;
         }
@@ -603,19 +601,19 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
                    "S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT," 5-10
                    "TOS,SAMPLE_MODE,SAMPLE_INT,BYTES_PER_PKT,FLOW_TYPE FROM NETSTREAM; 11-15 */
                 if (verbose) {
-                    printf("-6s %-8s %-22s %-22s %-4s %-4s %-8s\n", result[i *  n_columns], \
-                           result[i *  n_columns + 1], result[i *  n_columns + 3], \
-                           result[i *  n_columns + 4], result[i *  n_columns + 7], \
-                           result[i *  n_columns + 8], result[i *  n_columns + 9]);
+                    printf("-6s %-8s %-22s %-22s %-4s %-4s %-8s\n", result[i *  n_column], \
+                           result[i *  n_column + 1], result[i *  n_column + 3], \
+                           result[i *  n_column + 4], result[i *  n_column + 7], \
+                           result[i *  n_column + 8], result[i *  n_column + 9]);
                     printf("FlowType: %-16s     SampleMode: %-16s SampleInterval: %-5s\n", \
-                           result[i *  n_columns + 15], result[i *  n_columns + 12], \
-                           result[i *  n_columns + 13]);
+                           result[i *  n_column + 15], result[i *  n_column + 12], \
+                           result[i *  n_column + 13]);
                     printf("Bytes: %-20s    Bytes/Pkts: %-16s Tos: %-16s\n",  \
-                           result[i *  n_columns + 10], result[i *  n_columns + 14], \
-                           result[i *  n_columns + 11]);
+                           result[i *  n_column + 10], result[i *  n_column + 14], \
+                           result[i *  n_column + 11]);
                     printf("StartTime: %-19s EndTime: %-19s Durations: %-8s s\n", \
-                           result[i *  n_columns + 5], result[i *  n_columns + 6], \
-                           result[i *  n_columns + 2]); 
+                           result[i *  n_column + 5], result[i *  n_column + 6], \
+                           result[i *  n_column + 2]); 
                     if (first_flag) {
                         first_flag = false;
                     }else
@@ -626,10 +624,10 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
                 {
                     /* SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,
                        INPUT,OUTPUT,PACKET_COUNT FROM NETSTREAM; */
-                    printf("%-6s %-8s %-22s %-22s %-4s %-4s %-8s\n", result[i *  n_columns], \
-                           result[i *  n_columns + 1], result[i *  n_columns + 2], \
-                           result[i *  n_columns + 3], result[i *  n_columns + 4], \
-                           result[i *  n_columns + 5], result[i *  n_columns + 6]);
+                    printf("%-6s %-8s %-22s %-22s %-4s %-4s %-8s\n", result[i *  n_column], \
+                           result[i *  n_column + 1], result[i *  n_column + 2], \
+                           result[i *  n_column + 3], result[i *  n_column + 4], \
+                           result[i *  n_column + 5], result[i *  n_column + 6]);
                 }
                 
             }
@@ -659,7 +657,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
     quit:
     if (tcsetattr(0, TCSANOW, &init_setting) != 0)
     {
-        VLOG_ERR("Cannot set the attribution of the terminal.");
+        printf("Cannot set the attribution of the terminal.");
     }
     free(sqlcmd_tmp);
 }

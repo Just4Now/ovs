@@ -185,18 +185,18 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         sprintf(db_file_path, "%s/%s-%s", ns->log_path, ns->bridge_name, NS_DB_FILE_NAME);
         rc = sqlite3_open(db_file_path, &db);
         if (rc != SQLITE_OK) {
-            VLOG_ERR_RL(&rl, "Can't open netstream log database(%s), please check "
+            printf_RL(&rl, "Can't open netstream log database(%s), please check "
                          "if it is bad.(Error message:%s)", db_file_path，sqlite3_errmsg(db));
             goto err_open;
         }else{
             rc = sqlite3_exec(db, "PRRAGMA synchronous = OFF", 0, 0, &errmsg);  //关闭同步
             if (rc != SQLITE_OK) {  //关闭同步失败
-                VLOG_ERR_RL(&rl, "Turn off synchronous failed.(Error message:%s)", errmsg);
+                printf_RL(&rl, "Turn off synchronous failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
             rc = sqlite3_exec(db, "BEGIN", 0, 0, &errmsg); //开启事务
             if (rc != SQLITE_OK) {  //开启事务失败
-                VLOG_ERR_RL(&rl, "Excuting begin failed.(Error message:%s)", errmsg);
+                printf_RL(&rl, "Excuting begin failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }
@@ -205,14 +205,14 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         {
             rc = sqlite3_exec(db, "COMMIT", 0, 0, &errmsg); //提交事务
             if (rc != SQLITE_OK) {  //提交事务失败
-                VLOG_ERR_RL(&rl, "Excuting commit failed.(Error message:%s)", errmsg);
+                printf_RL(&rl, "Excuting commit failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }else
         {
             rc = sqlite3_exec(db, "ROLLBACK", 0, 0, &errmsg); //提交事务
             if (rc != SQLITE_OK) {  //提交事务失败
-                VLOG_ERR_RL(&rl, "Excuting rollback failed.(Error message:%s)", errmsg);
+                printf_RL(&rl, "Excuting rollback failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }
@@ -379,7 +379,7 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, enum FLO
         strftime(ns_db_record.s_time_read, NS_MAX_STRING_READABLE, "%F %T", &s_tm);
         strftime(ns_db_record.e_time_read, NS_MAX_STRING_READABLE, "%F %T", &e_tm);
 
-        if (!netstream_db_enqueue(ns->ns_db_que, &ns_db_record))
+        if (!netstream_db_enqueue(&ns->ns_db_que, &ns_db_record))
         {
             VLOG_WARN_RL(&rl, "%s:the netstream db queue is full!", ns->bridge_name);
         }
@@ -416,8 +416,8 @@ netstream_create_database(struct netstream *ns)
     
     rc = sqlite3_open(db_file_path, &db);
     if (rc != SQLITE_OK) {
-        VLOG_ERR("Can't open netstream log database(%s), please " 
-                 "check if it is bad.(Error message:%s)", db_file_path, sqlite3_errmsg(db);
+        printf("Can't open netstream log database(%s), please " 
+                 "check if it is bad.(Error message:%s)", db_file_path, sqlite3_errmsg(db));
         goto err_open;
     }
 
@@ -448,8 +448,8 @@ netstream_create_database(struct netstream *ns)
             "FLOW_TYPE     CHAR(32));");
     rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
     if( rc != SQLITE_OK ){
-        VLOG_ERR("Can't create main table netstream in %s."
-                 "(Error message:%s)", db_file_path, zErrMsg);
+        printf("Can't create main table netstream in %s."
+                 "(Error message:%s)", db_file_path, errmsg);
         goto err_create;
     }
 
@@ -462,8 +462,8 @@ netstream_create_database(struct netstream *ns)
                 "COUNT INTEGER);", sql_index_name[i + 1]);
         rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
         if( rc != SQLITE_OK ){
-            VLOG_ERR("%s:Can't create subtable (%s).(Error message:%s)", \
-                     sql_index_name[i], db_file_path, zErrMsg);
+            printf("%s:Can't create subtable (%s).(Error message:%s)", \
+                     sql_index_name[i], db_file_path, errmsg);
             goto err_create;
         }
     }
@@ -475,14 +475,14 @@ netstream_create_database(struct netstream *ns)
                 sql_index_name[i], sql_index_name[i + 1]);
         rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
         if( rc != SQLITE_OK ){
-            VLOG_ERR("%s:Can't create index(%s) on netstream (%s).(Error message:%s)", \
-                     sql_index_name[i], db_file_path, zErrMsg);
+            printf("%s:Can't create index(%s) on netstream (%s).(Error message:%s)", \
+                     sql_index_name[i], db_file_path, errmsg);
             goto err_create;
         }
     }
 
     err_create:
-    sqlite3_free(zErrMsg);
+    sqlite3_free(errmsg);
     err_open:
     sqlite3_close(db);
     free(sqlcmd);
@@ -490,26 +490,26 @@ netstream_create_database(struct netstream *ns)
 }
 
 static inline void
-netstream_db_createque(netstream_db_queue *ns_db_q, int maxlength)
+netstream_db_createque(struct netstream_db_queue *ns_db_q, int maxlength)
 {
-    ns_db_q->ns_db_node = (netstream_db_record *)malloc(sizeof(netstream_db_record) * maxlength);
-    memset(ns_db_q, 0, sizeof(netstream_db_record) * maxlength);
+    ns_db_q->ns_db_node = (struct netstream_db_record *)malloc(sizeof(struct netstream_db_record) * maxlength);
+    memset(ns_db_q, 0, sizeof(struct netstream_db_record) * maxlength);
     ns_db_q->front = 0;
     ns_db_q->rear = 0;
     ns_db_q->maxlength = maxlength;
 }
 
 static inline void
-netstream_db_destroyque(netstream_db_queue *ns_db_q)
+netstream_db_destroyque(struct netstream_db_queue *ns_db_q)
 {
-    free(ns_db_q->ns_db_node)
+    free(ns_db_q->ns_db_node);
     ns_db_q->ns_db_node = NULL;
 }
 
 static inline bool
-netstream_db_isfullq(netstream_db_queue *ns_db_q)  
+netstream_db_isfullq(struct netstream_db_queue *ns_db_q)  
 {  
-    if(ns_db_q->front == (ns_db_q->rear + 1) % ns_db_q->maxsize) {     
+    if(ns_db_q->front == (ns_db_q->rear + 1) % ns_db_q->maxlength) {     
         return true;
     } else {
         return false;
@@ -517,7 +517,7 @@ netstream_db_isfullq(netstream_db_queue *ns_db_q)
 } 
  
 static inline bool
-netstream_db_isemptyq(netstream_db_queue *ns_db_q)
+netstream_db_isemptyq(struct netstream_db_queue *ns_db_q)
 {  
     if(ns_db_q->front == ns_db_q->rear) {                   
         return true;
@@ -527,13 +527,13 @@ netstream_db_isemptyq(netstream_db_queue *ns_db_q)
 }  
 
 static inline int
-netstream_db_enqueue(netstream_db_queue *ns_db_q,struct netstream_db_record *ns_db_rec)  
+netstream_db_enqueue(struct netstream_db_queue *ns_db_q,struct netstream_db_record *ns_db_rec)  
 {  
     if(netstream_db_isfullq(ns_db_q)) {  
         return false; 
     } else {
-        memcpy(&(ns_db_q->data[ns_db_q->rear]), ns_db_rec, sizeof netstream_db_record);
-        ns_db_q->rear = (ns_db_q->rear + 1 ) % ns_db_q->maxsize;
+        memcpy(&(ns_db_q->ns_db_node[ns_db_q->rear]), ns_db_rec, sizeof (struct netstream_db_record));
+        ns_db_q->rear = (ns_db_q->rear + 1 ) % ns_db_q->maxlength;
         return true;  
     }      
 }  
@@ -544,8 +544,8 @@ netstream_db_dequeue(struct netstream_db_queue *ns_db_q, struct netstream_db_rec
     if(netstream_db_isemptyq(ns_db_q)) {  
         return false;  
     } else {
-        memcpy(ns_db_record, &ns_db_q->ns_db_node[front], sizeof(netstream_db_record));
-        ns_db_q->front = (ns_db_q->front + 1) % ns_db_q->maxsize;  
+        memcpy(ns_db_record, &ns_db_q->ns_db_node[ns_db_q->front], sizeof(struct netstream_db_record));
+        ns_db_q->front = (ns_db_q->front + 1) % ns_db_q->maxlength;  
         return true;  
     }
 }
@@ -560,7 +560,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
 
     memset(sqlcmd, 0, sizeof sqlcmd);
-    sprintf(sql, "%s", "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
+    sprintf(sqlcmd, "%s", "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
     rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_main_table, 0);
     if(rc != SQLITE_OK)
     {
@@ -573,7 +573,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
         /* 如果在INSERT语句末尾指定了ON DUPLICATE KEY UPDATE，
            如果插入行后会导致在一个UNIQUE索引或PRIMARY KEY中出现重复值，
            则执行UPDATE；如果不会导致唯一值列重复的问题，则插入新行。 */
-        sprintf(sql, "INSERT INTO %s (VALUE,COUNT) VALUES(?,1) "
+        sprintf(sqlcmd, "INSERT INTO %s (VALUE,COUNT) VALUES(?,1) "
                 "ON DUPLICATE KEY UPDATE COUNT=COUNT+1;", sql_index_name[i]);
         rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_sub_table[i], 0);
         if(rc != SQLITE_OK)
@@ -583,7 +583,8 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     }
 
     struct netstream_db_record ns_db_record;
-    while(netstream_db_dequeue(ns->ns_db_que, &ns_db_record){
+    while(netstream_db_dequeue(&ns->ns_db_que, &ns_db_record){
+
         sqlite3_reset(stmt_main_table);
         sqlite3_bind_text(stmt_main_table, 1, ns->bridge_name, strlen(ns->bridge_name), NULL);
         sqlite3_bind_int(stmt_main_table, 2, ns_db_record->src_ip);
@@ -661,7 +662,7 @@ netstream_log_path_init(struct netstream *ns)
     {  
         if(mkdir(ns_log_dir, NS_LOG_DIR_MODE) != 0)  
         {
-            VLOG_ERR("%s:Can't create netstream log path(%s)", ns_log_dir);
+            printf("%s:Can't create netstream log path(%s)", ns_log_dir);
             ns->log = false;
             return;   
         } 
