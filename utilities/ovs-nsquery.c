@@ -11,7 +11,7 @@
 #include <termios.h>
 
 #include "sqlite3.h"
-#include "openvswitch/vlog.h"
+#include "vlog.h"
 
 #define NS_MAX_QUERY_CONDITION 8
 #define NS_MAX_INDEX_LENGTH 8

@@ -24,6 +24,8 @@ ofproto_libofproto_la_SOURCES = \
 	ofproto/names.c \
 	ofproto/netflow.c \
 	ofproto/netflow.h \
+	ofproto/netstream.c \
+	ofproto/netstream.h \
 	ofproto/ofproto.c \
 	ofproto/ofproto.h \
 	ofproto/ofproto-dpif.c \
