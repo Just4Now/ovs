@@ -11,7 +11,7 @@
 #include <termios.h>
 
 #include "sqlite3.h"
-#include "vlog.h"
+#include "openvswitch/vlog.h"
 
 #define NS_MAX_QUERY_CONDITION 8
 #define NS_MAX_INDEX_LENGTH 8
@@ -556,6 +556,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
     char *err_msg;
     char **result;
     int query_offset = 0;
+    int first_flag = true;
     char *sqlcmd_tmp = (char *)malloc(NS_MAX_SQL_CMD_LENGTH); 
     struct termios new_setting,init_setting;
    
@@ -604,15 +605,21 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
                            result[i *  n_columns + 1], result[i *  n_columns + 3], \
                            result[i *  n_columns + 4], result[i *  n_columns + 7], \
                            result[i *  n_columns + 8], result[i *  n_columns + 9]);
-                    printf("       FlowType: %16s       SampleMode: %16s  SampleInterval: %s\n", \
+                    printf("FlowType: %-16s     SampleMode: %-16s SampleInterval: %-5s\n", \
                            result[i *  n_columns + 15], result[i *  n_columns + 12], \
                            result[i *  n_columns + 13]);
-                    printf("       Bytes: %19s          Bytes/Pkts: %16s  Tos: %21s\n",  \
+                    printf("Bytes: %-20s    Bytes/Pkts: %-16s Tos: %-16s\n",  \
                            result[i *  n_columns + 10], result[i *  n_columns + 14], \
                            result[i *  n_columns + 11]);
-                    printf("       StartTime: %19s  EndTime: %19s  Durations: %s s\n", \
+                    printf("StartTime: %-19s EndTime: %-19s Durations: %-8s s\n", \
                            result[i *  n_columns + 5], result[i *  n_columns + 6], \
-                           result[i *  n_columns + 2]);              
+                           result[i *  n_columns + 2]); 
+                    if (first_flag) {
+                        first_flag = false;
+                    }else
+                    {
+                        printf("\n");
+                    }               
                 }else
                 {
                     /* SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,
