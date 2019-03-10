@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <assert.h>
 
 #include "openvswitch/ofpbuf.h"
 #include "netstream.h"
@@ -326,11 +327,31 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, enum FLO
         ns_db_record.packet_count = ns_rec->packet_count;
         ns_db_record.byte_count = ns_rec->byte_count;
         ns_db_record.duration = ns_db_record.end_time - ns_db_record.start_time;
-        ns_db_record.protocol = ns_rec->ip_proto;
         ns_db_record.ip_tos = ns_rec->ip_tos;
-        ns_db_record.flow_type = (uint8_t)flow_type;
+        ns_db_record.sample_mode = (uint8_t)ns->sample_mode;
+        ns_db_record.sample_interval = ns->sample_interval;
+        ns_db_record.bytes_per_pkt = ns_db_record.byte_count / ns_db_record.packet_count;
 
-        if (ns_db_record.protocol == NS_TCP || ns_db_record.protocol == NS_UDP) {
+        switch (flow_type)
+        {
+            case INACTIVE_FLOW:
+                strcpy(ns_db_record.flow_type, "inactive flow");
+                break;
+            case INACTIVE_FLOW:
+                strcpy(ns_db_record.flow_type, "active flow");
+                break;
+            default:
+                assert(0);
+                break;
+        }
+
+        if (ns_flow->ip_proto == NS_TCP || ns_flow->ip_proto == NS_UDP) {
+            if (ns_flow->ip_proto == NS_TCP) {
+                strcpy(ns_db_record.protocol, "TCP");
+            }else
+            {
+                strcpy(ns_db_record.protocol, "UDP");
+            }         
             struct in_addr addr;
             addr.s_addr = ns_record.src_ip;
             sprintf(ns_db_record.src_ip_port, "%s:%u", inet_ntoa(addr), ns_db_record.src_port);
@@ -338,6 +359,12 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, enum FLO
             sprintf(ns_db_record.dst_ip_port, "%s:%u", inet_ntoa(addr), ns_db_record.dst_port);
         }else
         {
+            if (ns_flow->ip_proto == NS_ICMP) {
+                strcpy(ns_db_record.protocol, "ICMP");
+            }else
+            {
+                strcpy(ns_db_record.protocol, "IP-Other");
+            }
             struct in_addr addr;
             addr.s_addr = ns_record.src_ip;
             sprintf(ns_db_record.src_ip_port, "%s", inet_ntoa(addr);
@@ -355,7 +382,7 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, enum FLO
             VLOG_WARN_RL(&rl, "%s:the netstream db queue is full!", ns->bridge_name);
         }
     }
-    
+
     /* NetStream messages are limited to 30 records. */
     if (ntohs(ns_hdr->count) >= 30) {
         netstream_run__(ns);
@@ -381,7 +408,7 @@ netstream_create_database(struct netstream *ns)
     sqlite3* db;
     char *errmsg = NULL;
     int rc;
-    char *sqlcmd = (char *)malloc(NS_MAX_SQL_CML_LENGTH);
+    char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
 
     sprintf(db_file_path, "%s/%s-%s", ns->log_path, ns->bridge_name, NS_DB_FILE_NAME);
     
@@ -400,7 +427,7 @@ netstream_create_database(struct netstream *ns)
             "DST_IP        INTEGER,"
             "SRC_PORT      INTEGER,"
             "DST_PORT      INTEGER,"
-            "PROTOCOL      INTEGER,"
+            "PROTOCOL      CHAR(32),"
             "START_TIME    INTEGER,"
             "END_TIME      INTEGER,"
             "DURATION      INTEGER,"
@@ -413,7 +440,10 @@ netstream_create_database(struct netstream *ns)
             "PACKET_COUNT  INTEGER,"
             "BYTE_COUNT    INTEGER,"
             "TOS           INTEGER,"
-            "FLOW_TYPE     INTEGER);");
+            "SAMPLE_MODE   INTEGER,"
+            "SAMPLE_INT    INTEGER,"
+            "BYTES_PER_PKT INTEGER,"
+            "FLOW_TYPE     CHAR(32));");
     rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
     if( rc != SQLITE_OK ){
         VLOG_ERR("Can't create main table netstream in %s."
@@ -501,7 +531,7 @@ netstream_db_enqueue(netstream_db_queue *ns_db_q,struct netstream_db_record *ns_
         return false; 
     } else {
         memcpy(&(ns_db_q->data[ns_db_q->rear]), ns_db_rec, sizeof netstream_db_record);
-        ns_db_q->rear = (ns_db_q->rear + 1 ) % Q->maxsize;
+        ns_db_q->rear = (ns_db_q->rear + 1 ) % ns_db_q->maxsize;
         return true;  
     }      
 }  
@@ -528,7 +558,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
 
     memset(sqlcmd, 0, sizeof sqlcmd);
-    sprintf(sql, "%s", "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
+    sprintf(sql, "%s", "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
     rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_main_table, 0);
     if(rc != SQLITE_OK)
     {
@@ -558,7 +588,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
         sqlite3_bind_int(stmt_main_table, 3, ns_db_record->dst_ip);
         sqlite3_bind_int(stmt_main_table, 4, ns_db_record->src_port);
         sqlite3_bind_int(stmt_main_table, 5, ns_db_record->dst_port);
-        sqlite3_bind_int(stmt_main_table, 6, ns_db_record->protocol);
+        sqlite3_bind_text(stmt_main_table, 6, ns_db_record->protocol, strlen(ns->protocol), NULL);
         sqlite3_bind_int(stmt_main_table, 7, ns_db_record->start_time);
         sqlite3_bind_int(stmt_main_table, 8, ns_db_record->end_time);
         sqlite3_bind_int(stmt_main_table, 9, ns_db_record->duration);
@@ -571,7 +601,10 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
         sqlite3_bind_int(stmt_main_table, 16, ns_db_record->packet_count);
         sqlite3_bind_int(stmt_main_table, 17, ns_db_record->byte_count);
         sqlite3_bind_int(stmt_main_table, 18, ns_db_record->ip_tos);
-        sqlite3_bind_int(stmt_main_table, 19, ns_db_record->flow_type);
+        sqlite3_bind_int(stmt_main_table, 19, ns_db_record->bytes_per_pkt);
+        sqlite3_bind_int(stmt_main_table, 20, ns_db_record->sample_mode);
+        sqlite3_bind_int(stmt_main_table, 21, ns_db_record->sample_interval);
+        sqlite3_bind_text(stmt_main_table, 6, ns_db_record->flow_type, strlen(ns->flow_type), NULL);
         rc = sqlite3_step(stmt_main_table);
         if(rc != SQLITE_OK)
         {

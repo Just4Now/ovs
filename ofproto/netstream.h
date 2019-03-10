@@ -9,6 +9,7 @@
 #define NS_LOG_DIR_MODE 0755
 #define NS_MAX_DB_PATH_LENGTH 64
 #define NS_MAX_STRING_READABLE 32
+#define NS_ICMP 1
 #define NS_TCP 6
 #define NS_UDP 17
 #define NS_MAX_SQL_CMD_LENGTH 512
@@ -176,10 +177,12 @@ struct netstream_db_record{
     char e_time_read[NS_MAX_STRING_READABLE];
     
     uint32_t duration;
-    uint8_t protocol;
+    char protocol[NS_MAX_STRING_READABLE];
+    uint64_t bytes_per_pkt;
     uint8_t ip_tos;
-    uint8_t flow_type;
-    uint8_t pad;
+    uint8_t sample_mode;
+    uint16_t sample_interval;
+    char flow_type[NS_MAX_STRING_READABLE];
 }
 
 struct netstream_db_queue{

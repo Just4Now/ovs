@@ -8,6 +8,7 @@
 #include <time.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <termios.h>
 
 #include "sqlite3.h"
 #include "vlog.h"
@@ -20,6 +21,15 @@
 #define NS_MAX_QUERY_ROW 72
 #define NS_MAX_VALUE_LENGTH 32
 #define NS_MAX_SQL_CMD_LENGTH 512
+#define NS_DISPLAY_MORE_LENGTH 24
+#define NS_DISPLAY_MORE_LENGTH_VERBOSE 6
+
+#define NS_ICMP 1
+#define NS_TCP 6
+#define NS_UDP 17
+
+
+#define MAX(a,b)  (((a)>(b))?(a):(b))
 
 struct query_single_cond
 {
@@ -393,13 +403,13 @@ ns_query_database(struct query_conditions *q_c)
     }
 
     if (q_c->verbose) {
-        n_stable += sprintf(sqlcmd, "SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,"
+        n_stable += sprintf(sqlcmd, "SELECT BR_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT,"
                 "S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT,"
-                "TOS,FLOW_TYPE FROM NETSTREAM ");
+                "TOS,SAMPLE_INT,BYTES_PER_PKT,FLOW_TYPE FROM NETSTREAM ");
     }else
     {
         n_stable += sprintf(sqlcmd, "SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,"
-                "INPUT,PACKET_COUNT,TOS FROM NETSTREAM ");
+                "INPUT,OUTPUT,PACKET_COUNT FROM NETSTREAM ");
     }
 
     for(size_t i = 0; i < NS_MAX_QUERY_CONDITION; i++)
@@ -463,7 +473,7 @@ ns_query_database(struct query_conditions *q_c)
                         }                       
                     }
                 }   
-                ns_query_get_table(db, sqlcmd);
+                ns_query_get_table(db, sqlcmd, q_c->verbose);
             }    
         }else
         {
@@ -537,25 +547,42 @@ ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_i
     return true;
 }
 
-static bool
-ns_query_get_table(sqlite3 *db, char *sqlcmd)
+static void
+ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
 {
     int rc;
     int n_row;
     int n_column;
     char *err_msg;
     char **result;
-    uint32_t query_offset = 0;
-    char *sqlcmd_tmp = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
+    int query_offset = 0;
+    char *sqlcmd_tmp = (char *)malloc(NS_MAX_SQL_CMD_LENGTH); 
+    struct termios new_setting,init_setting;
+   
+    if (tcgetattr(0, &init_setting) != 0)
+    {
+        VLOG_ERR("Cannot get the attribution of the terminal.");
+        goto quit;
+    }
+    memcpy(&new_setting, &init_setting, sizeof(struct termios));
 
-    /* LIMIT [no of rows] OFFSET [row num] */
+    new_setting.c_lflag &= ~(ICANON | ECHO);
 
-    /* more效果 limit offset限制*/
+    if (tcsetattr(0, TCSANOW, &new_setting) != 0)
+    {
+        VLOG_ERR("Cannot set the attribution of the terminal.");
+        goto quit;
+    }
+
+    printf("Bri-name Protocol SrcIP(Port)       DstIP(Port)       Input Output Pkts\n");
+    printf("------   -------- ----------------- ----------------- ----  ----   --------\n");
+
     do
     {
         memset(sqlcmd_tmp, 0, NS_MAX_SQL_CMD_LENGTH);
-        sprintf("%s LIMIT %u OFFSET %u;", NS_MAX_SQL_CMD_LENGTH, query_offset);
-        rc = sqlite3_get_table(db, sqlcmd, &dbresult, &n_row, &n_column, &err_msg);
+        /* 加入limit offset限制 */
+        sprintf("%s LIMIT %d OFFSET %d;", NS_MAX_SQL_CMD_LENGTH, query_offset);
+        rc = sqlite3_get_table(db, sqlcmd, &result, &n_row, &n_column, &err_msg);
         if (rc != SQLITE_OK) {
             VLOG_ERR("Find best index error(Error message:%s)." ,errmsg);
             sqlite3_free(errmsg);
@@ -563,7 +590,66 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd)
             return;
         }
 
+        int left_n_column = n_column;
+        while(left_n_column > 0){
+            int max_display_records = verbose ? NS_DISPLAY_MORE_LENGTH_VERBOSE : NS_DISPLAY_MORE_LENGTH;
+            int actual_records = MAX(left_n_column, max_display_records);
+            for(int i = 1; i < actual_records; i++)
+            {
+                /* "SELECT BR_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT," 0-4
+                   "S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT," 5-10
+                   "TOS,SAMPLE_MODE,SAMPLE_INT,BYTES_PER_PKT,FLOW_TYPE FROM NETSTREAM; 11-15 */
+                if (verbose) {
+                    printf("-6s %-8s %-22s %-22s %-4s %-4s %-8s\n", result[i *  n_columns], \
+                           result[i *  n_columns + 1], result[i *  n_columns + 3], \
+                           result[i *  n_columns + 4], result[i *  n_columns + 7], \
+                           result[i *  n_columns + 8], result[i *  n_columns + 9]);
+                    printf("       FlowType: %16s       SampleMode: %16s  SampleInterval: %s\n", \
+                           result[i *  n_columns + 15], result[i *  n_columns + 12], \
+                           result[i *  n_columns + 13]);
+                    printf("       Bytes: %19s          Bytes/Pkts: %16s  Tos: %21s\n",  \
+                           result[i *  n_columns + 10], result[i *  n_columns + 14], \
+                           result[i *  n_columns + 11]);
+                    printf("       StartTime: %19s  EndTime: %19s  Durations: %s s\n", \
+                           result[i *  n_columns + 5], result[i *  n_columns + 6], \
+                           result[i *  n_columns + 2]);              
+                }else
+                {
+                    /* SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,
+                       INPUT,OUTPUT,PACKET_COUNT FROM NETSTREAM; */
+                    printf("%-6s %-8s %-22s %-22s %-4s %-4s %-8s\n", result[i *  n_columns], \
+                           result[i *  n_columns + 1], result[i *  n_columns + 2], \
+                           result[i *  n_columns + 3], result[i *  n_columns + 4], \
+                           result[i *  n_columns + 5], result[i *  n_columns + 6]);
+                }
+                
+            }
+
+            left_n_column -= NS_DISPLAY_MORE_LENGTH;    //最多一次显示24行
+            if (left_n_column > 0) {
+                /* 实现简单的more效果 */
+                int c;
+                do
+                {
+                    printf("---- Enter space to display more records or 'q' to quit. ----\n");
+                    c = getchar();
+                    if (c == 'q') {
+                        goto quit;
+                    }else if (c == ' ') {
+                        break;
+                    }else
+                    {
+                        /* do nothing */
+                    }
+                } while (c != EOF);
+            }
+        }
         query_offset += NS_MAX_QUERY_ROW;
     } while (n_row != 0);
+    quit:
+    if (tcsetattr(0, TCSANOW, &init_setting) != 0)
+    {
+        VLOG_ERR("Cannot set the attribution of the terminal.");
+    }
     free(sqlcmd_tmp);
 }
