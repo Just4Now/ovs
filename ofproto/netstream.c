@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include "collectors.h"
 #include "openvswitch/ofpbuf.h"
@@ -583,44 +584,44 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     }
 
     struct netstream_db_record ns_db_record;
-    while(netstream_db_dequeue(&ns->ns_db_que, &ns_db_record){
+    while(netstream_db_dequeue(&ns->ns_db_que, &ns_db_record)){
 
         sqlite3_reset(stmt_main_table);
         sqlite3_bind_text(stmt_main_table, 1, ns->bridge_name, strlen(ns->bridge_name), NULL);
-        sqlite3_bind_int(stmt_main_table, 2, ns_db_record->src_ip);
-        sqlite3_bind_int(stmt_main_table, 3, ns_db_record->dst_ip);
-        sqlite3_bind_int(stmt_main_table, 4, ns_db_record->src_port);
-        sqlite3_bind_int(stmt_main_table, 5, ns_db_record->dst_port);
-        sqlite3_bind_text(stmt_main_table, 6, ns_db_record->protocol, strlen(ns->protocol), NULL);
-        sqlite3_bind_int(stmt_main_table, 7, ns_db_record->start_time);
-        sqlite3_bind_int(stmt_main_table, 8, ns_db_record->end_time);
-        sqlite3_bind_int(stmt_main_table, 9, ns_db_record->duration);
-        sqlite3_bind_text(stmt_main_table, 10, ns_db_record->src_ip_port, strlen(ns_db_record->src_ip_port), NULL);
-        sqlite3_bind_text(stmt_main_table, 11, ns_db_record->dst_ip_port, strlen(ns_db_record->dst_ip_port), NULL);
-        sqlite3_bind_text(stmt_main_table, 12, ns_db_record->s_time_read, strlen(ns_db_record->s_time_read), NULL);
-        sqlite3_bind_text(stmt_main_table, 13, ns_db_record->e_time_read, strlen(ns_db_record->e_time_read), NULL);
-        sqlite3_bind_int(stmt_main_table, 14, ns_db_record->input);
-        sqlite3_bind_int(stmt_main_table, 15, ns_db_record->output);
-        sqlite3_bind_int(stmt_main_table, 16, ns_db_record->packet_count);
-        sqlite3_bind_int(stmt_main_table, 17, ns_db_record->byte_count);
-        sqlite3_bind_int(stmt_main_table, 18, ns_db_record->ip_tos);
-        sqlite3_bind_int(stmt_main_table, 19, ns_db_record->bytes_per_pkt);
-        sqlite3_bind_int(stmt_main_table, 20, ns_db_record->sample_mode);
-        sqlite3_bind_int(stmt_main_table, 21, ns_db_record->sample_interval);
-        sqlite3_bind_text(stmt_main_table, 6, ns_db_record->flow_type, strlen(ns->flow_type), NULL);
+        sqlite3_bind_int(stmt_main_table, 2, ns_db_record.src_ip);
+        sqlite3_bind_int(stmt_main_table, 3, ns_db_record.dst_ip);
+        sqlite3_bind_int(stmt_main_table, 4, ns_db_record.src_port);
+        sqlite3_bind_int(stmt_main_table, 5, ns_db_record.dst_port);
+        sqlite3_bind_text(stmt_main_table, 6, ns_db_record.protocol, strlen(ns_db_record.protocol), NULL);
+        sqlite3_bind_int(stmt_main_table, 7, ns_db_record.start_time);
+        sqlite3_bind_int(stmt_main_table, 8, ns_db_record.end_time);
+        sqlite3_bind_int(stmt_main_table, 9, ns_db_record.duration);
+        sqlite3_bind_text(stmt_main_table, 10, ns_db_record.src_ip_port, strlen(ns_db_record.src_ip_port), NULL);
+        sqlite3_bind_text(stmt_main_table, 11, ns_db_record.dst_ip_port, strlen(ns_db_record.dst_ip_port), NULL);
+        sqlite3_bind_text(stmt_main_table, 12, ns_db_record.s_time_read, strlen(ns_db_record.s_time_read), NULL);
+        sqlite3_bind_text(stmt_main_table, 13, ns_db_record.e_time_read, strlen(ns_db_record.e_time_read), NULL);
+        sqlite3_bind_int(stmt_main_table, 14, ns_db_record.input);
+        sqlite3_bind_int(stmt_main_table, 15, ns_db_record.output);
+        sqlite3_bind_int(stmt_main_table, 16, ns_db_record.packet_count);
+        sqlite3_bind_int(stmt_main_table, 17, ns_db_record.byte_count);
+        sqlite3_bind_int(stmt_main_table, 18, ns_db_record.ip_tos);
+        sqlite3_bind_int(stmt_main_table, 19, ns_db_record.bytes_per_pkt);
+        sqlite3_bind_int(stmt_main_table, 20, ns_db_record.sample_mode);
+        sqlite3_bind_int(stmt_main_table, 21, ns_db_record.sample_interval);
+        sqlite3_bind_text(stmt_main_table, 22, ns_db_record.flow_type, strlen(ns_db_record.flow_type), NULL);
         rc = sqlite3_step(stmt_main_table);
         if(rc != SQLITE_OK)
         {
             goto err_main;
         }
 
-        sqlite3_bind_int(stmt_sub_table[0], 1, ns_db_record->src_ip);
-        sqlite3_bind_int(stmt_sub_table[1], 1, ns_db_record->dst_ip);
-        sqlite3_bind_int(stmt_sub_table[2], 1, ns_db_record->src_port);
-        sqlite3_bind_int(stmt_sub_table[3], 1, ns_db_record->dst_port);
-        sqlite3_bind_int(stmt_sub_table[4], 1, ns_db_record->protocol);
-        sqlite3_bind_int(stmt_sub_table[5], 1, ns_db_record->start_time);
-        sqlite3_bind_int(stmt_sub_table[6], 1, ns_db_record->start_time);
+        sqlite3_bind_int(stmt_sub_table[0], 1, ns_db_record.src_ip);
+        sqlite3_bind_int(stmt_sub_table[1], 1, ns_db_record.dst_ip);
+        sqlite3_bind_int(stmt_sub_table[2], 1, ns_db_record.src_port);
+        sqlite3_bind_int(stmt_sub_table[3], 1, ns_db_record.dst_port);
+        sqlite3_bind_int(stmt_sub_table[4], 1, ns_db_record.protocol);
+        sqlite3_bind_int(stmt_sub_table[5], 1, ns_db_record.start_time);
+        sqlite3_bind_int(stmt_sub_table[6], 1, ns_db_record.start_time);
         for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
         {
             rc = sqlite3_step(stmt_sub_table[i]);
