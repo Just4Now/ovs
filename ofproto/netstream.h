@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "flow.h"
 #include "sset.h"
+#include "ofproto.h"
 
 #define NS_MAX_BRIDGE_NAME_LENGTH 16
 #define NS_MAX_PATH_LOG_LENGTH 48
@@ -17,7 +18,7 @@
 #define NS_SQL_TABLE_INDEX_NUM 7
 
 #define NS_SAMPLE_MODE_DEFAULT RANDOM_PACKETS
-#define NS_sample_interval_DEFAULT 100
+#define NS_SAMPLE_INTERVAL_DEFAULT 100
 #define NS_INACTIVE_TIMEOUT_DEFAULT 30
 #define NS_ACTIVE_TIMEOUT_DEFAULT 30
 #define NS_FLOW_CACHE_NUMBER_DEFAULT 10240

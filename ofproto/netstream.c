@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 #include <arpa/inet.h>
@@ -10,6 +9,8 @@
 #include <unistd.h>
 
 #include "collectors.h"
+#include "dpif.h"
+#include "flow.h"
 #include "openvswitch/ofpbuf.h"
 #include "openvswitch/poll-loop.h"
 #include "openvswitch/vlog.h"

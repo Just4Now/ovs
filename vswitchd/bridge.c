@@ -1215,27 +1215,27 @@ bridge_configure_netstream(struct bridge *br)
         opts.sample_mode = NS_SAMPLE_MODE_DEFAULT;
     }
     /* sample_interval */
-    opt.sample_interval = NS_sample_interval_DEFAULT;
+    opts.sample_interval = NS_SAMPLE_INTERVAL_DEFAULT;
     if (cfg->sample_interval) {
-        opt.sample_interval = cfg->sample_interval;
+        opts.sample_interval = *cfg->sample_interval;
     }      
 
     /* Confugure inactive timeout interval */
-    opt.inactive_timeout = NS_INACTIVE_TIMEOUT_DEFAULT;
-    if (cfg->active_timeou) {
-        opts.inactive_timeout = cfg->active_timeout;
+    opts.inactive_timeout = NS_INACTIVE_TIMEOUT_DEFAULT;
+    if (cfg->active_timeout) {
+        opts.inactive_timeout = *cfg->active_timeout;
     }
 
     /* Configure active timeout interval. */
-    opt.active_timeout = NS_ACTIVE_TIMEOUT_DEFAULT;
+    opts.active_timeout = NS_ACTIVE_TIMEOUT_DEFAULT;
     if (cfg->active_timeout) {
-        opts.active_timeout = cfg->active_timeout;
+        opts.active_timeout = *cfg->active_timeout;
     }
 
     /* flow_cache_number */
     opts.flow_cache_number = NS_FLOW_CACHE_NUMBER_DEFAULT;
     if (cfg->flow_cache_number) {
-        opts.flow_cache_number = cfg->flow_cache_number;
+        opts.flow_cache_number = *cfg->flow_cache_number;
     }
 
     /* Add engine ID to interface number to disambiguate bridgs? */
@@ -1254,10 +1254,10 @@ bridge_configure_netstream(struct bridge *br)
     }
 
     /* Save to local and path*/
-    opt.log = cfg->log;
+    opts.log = cfg->log;
 
     /* TCP Flags */
-    opt.tcp_flag = cfg->tcp_flag;
+    opts.tcp_flag = cfg->tcp_flag;
     
     /* Collectors. */
     sset_init(&opts.collectors);
