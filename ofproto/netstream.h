@@ -193,5 +193,8 @@ struct netstream_v5_record {
 
 struct netstream *netstream_create(char *);
 void netstream_unref(struct netstream *);
+void netstream_run(struct netstream *);
+int netstream_set_options(struct netstream *, const struct netstream_options *);
+void netstream_wait(struct netstream *);
 
 #endif /* netstream.h */

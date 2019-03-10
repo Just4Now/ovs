@@ -11,6 +11,7 @@
 
 #include "collectors.h"
 #include "openvswitch/ofpbuf.h"
+#include "openvswitch/poll-loop.h"
 #include "openvswitch/vlog.h"
 #include "ofproto/netstream.h"
 #include "timeval.h"
@@ -20,6 +21,21 @@
 
 
 VLOG_DEFINE_THIS_MODULE(netstream);
+
+static void netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex);
+static void netstream_expire__(struct netstream *, struct netstream_flow *, enum FLOW_TYPE)
+    OVS_REQUIRES(mutex);
+static void gen_netstream_rec(struct netstream *, struct netstream_flow *, enum FLOW_TYPE)
+    OVS_REQUIRES(mutex);
+static void netstream_create_database(struct netstream *);
+static inline void netstream_db_createque(struct netstream_db_queue *, int);
+static inline void netstream_db_destroyque(struct netstream_db_queue *);
+static inline bool netstream_db_isfullq(struct netstream_db_queue *);
+static inline bool netstream_db_isemptyq(struct netstream_db_queue *);
+static inline int netstream_db_enqueue(struct netstream_db_queue *, struct netstream_db_record *);    
+static inline bool netstream_db_dequeue(struct netstream_db_queue *, struct netstream_db_record *);
+static bool netstream_write_into_db(sqlite3 *, struct netstream *);
+static void netstream_log_path_init(struct netstream *);
 
 static struct ovs_mutex mutex = OVS_MUTEX_INITIALIZER;
 static atomic_count netstream_count = ATOMIC_COUNT_INIT(0);
@@ -61,7 +77,7 @@ netstream_create(char *bridge_name)
 
 int
 netstream_set_options(struct netstream *ns,
-                    const struct netstream_options *ns_options)
+                      const struct netstream_options *ns_options)
     OVS_EXCLUDED(mutex)
 {
     int error = 0;
@@ -87,6 +103,7 @@ netstream_set_options(struct netstream *ns,
             netstream_log_path_init(ns);
             if (ns->log) {
                 netstream_db_createque(&ns->ns_db_que, ns->flow_cache_number);
+                netstream_create_database(ns);
             }
         }
         else 
@@ -181,23 +198,22 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         sqlite3* db;
         char *errmsg = NULL;
         int rc;
-        char *sqlcmd;
 
         sprintf(db_file_path, "%s/%s-%s", ns->log_path, ns->bridge_name, NS_DB_FILE_NAME);
         rc = sqlite3_open(db_file_path, &db);
         if (rc != SQLITE_OK) {
-            printf_RL(&rl, "Can't open netstream log database(%s), please check "
-                         "if it is bad.(Error message:%s)", db_file_path，sqlite3_errmsg(db));
+            printf("Can't open netstream log database(%s), please check "
+                   "if it is bad.(Error message:%s)", db_file_path, sqlite3_errmsg(db));
             goto err_open;
         }else{
             rc = sqlite3_exec(db, "PRRAGMA synchronous = OFF", 0, 0, &errmsg);  //关闭同步
             if (rc != SQLITE_OK) {  //关闭同步失败
-                printf_RL(&rl, "Turn off synchronous failed.(Error message:%s)", errmsg);
+                printf("Turn off synchronous failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
             rc = sqlite3_exec(db, "BEGIN", 0, 0, &errmsg); //开启事务
             if (rc != SQLITE_OK) {  //开启事务失败
-                printf_RL(&rl, "Excuting begin failed.(Error message:%s)", errmsg);
+                printf("Excuting begin failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }
@@ -206,14 +222,14 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         {
             rc = sqlite3_exec(db, "COMMIT", 0, 0, &errmsg); //提交事务
             if (rc != SQLITE_OK) {  //提交事务失败
-                printf_RL(&rl, "Excuting commit failed.(Error message:%s)", errmsg);
+                printf("Excuting commit failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }else
         {
             rc = sqlite3_exec(db, "ROLLBACK", 0, 0, &errmsg); //提交事务
             if (rc != SQLITE_OK) {  //提交事务失败
-                printf_RL(&rl, "Excuting rollback failed.(Error message:%s)", errmsg);
+                printf("Excuting rollback failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }
@@ -229,7 +245,7 @@ static void
 netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, enum FLOW_TYPE flow_type)
     OVS_REQUIRES(mutex)
 {
-    uint64_t pkts, bytes;
+    uint64_t pkts;
 
     pkts = ns_flow->packet_count;
 
@@ -422,7 +438,7 @@ netstream_create_database(struct netstream *ns)
         goto err_open;
     }
 
-    memset(sqlcmd, 0, sizeof sqlcmd);
+    memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
     sprintf(sqlcmd, \
             "CREATE TABLE IF NOT EXISTS NESTREAM("
             "BRIDEG_NAME   CHAR(16),"
@@ -456,8 +472,8 @@ netstream_create_database(struct netstream *ns)
 
     for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
     {
-        memset(sqlcmd, 0, sizeof sqlcmd);
-        sprintf(sqlcmd, \ 
+        memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
+        sprintf(sqlcmd,
                 "CREATE TABLE IF NOT EXISTS %s("
                 "VALUE INTEGER PRIMARY KEY,"
                 "COUNT INTEGER);", sql_index_name[i + 1]);
@@ -471,13 +487,13 @@ netstream_create_database(struct netstream *ns)
 
     for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
     {
-        memset(sqlcmd, 0, sizeof sqlcmd);
+        memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
         sprintf(sqlcmd, "CREATE INDEX %s IF NOT EXISTS ON NETSTREAM (%s);", \
                 sql_index_name[i], sql_index_name[i + 1]);
         rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
         if( rc != SQLITE_OK ){
-            printf("%s:Can't create index(%s) on netstream (%s).(Error message:%s)", \
-                     sql_index_name[i], db_file_path, errmsg);
+            printf("Can't create index(%s) on netstream (%s).(Error message:%s)", \
+                   sql_index_name[i], db_file_path, errmsg);
             goto err_create;
         }
     }
@@ -489,6 +505,7 @@ netstream_create_database(struct netstream *ns)
     free(sqlcmd);
     return;
 }
+
 
 static inline void
 netstream_db_createque(struct netstream_db_queue *ns_db_q, int maxlength)
@@ -560,7 +577,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     int rc;
     char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
 
-    memset(sqlcmd, 0, sizeof sqlcmd);
+    memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
     sprintf(sqlcmd, "%s", "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
     rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_main_table, 0);
     if(rc != SQLITE_OK)
@@ -570,7 +587,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
 
     for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
     {
-        memset(sqlcmd, 0, sizeof sqlcmd);
+        memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
         /* 如果在INSERT语句末尾指定了ON DUPLICATE KEY UPDATE，
            如果插入行后会导致在一个UNIQUE索引或PRIMARY KEY中出现重复值，
            则执行UPDATE；如果不会导致唯一值列重复的问题，则插入新行。 */
@@ -619,7 +636,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
         sqlite3_bind_int(stmt_sub_table[1], 1, ns_db_record.dst_ip);
         sqlite3_bind_int(stmt_sub_table[2], 1, ns_db_record.src_port);
         sqlite3_bind_int(stmt_sub_table[3], 1, ns_db_record.dst_port);
-        sqlite3_bind_int(stmt_sub_table[4], 1, ns_db_record.protocol);
+        sqlite3_bind_text(stmt_sub_table[4], 1, ns_db_record.protocol, strlen(ns_db_record.protocol), NULL);
         sqlite3_bind_int(stmt_sub_table[5], 1, ns_db_record.start_time);
         sqlite3_bind_int(stmt_sub_table[6], 1, ns_db_record.start_time);
         for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
@@ -651,7 +668,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     return false;
 }
 
-void
+static void
 netstream_log_path_init(struct netstream *ns)
 {
     char ns_log_dir[NS_MAX_PATH_LOG_LENGTH] = {0};
@@ -663,7 +680,7 @@ netstream_log_path_init(struct netstream *ns)
     {  
         if(mkdir(ns_log_dir, NS_LOG_DIR_MODE) != 0)  
         {
-            printf("%s:Can't create netstream log path(%s)", ns_log_dir);
+            printf("Can't create netstream log path(%s)", ns_log_dir);
             ns->log = false;
             return;   
         } 
