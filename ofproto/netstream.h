@@ -30,12 +30,12 @@
 enum SAMPLE_MODE {
     FIX_PACKETS,
     RANDOM_PACKETS
-}
+};
 
 enum FLOW_TYPE {
     INACTIVE_FLOW,
     ACTIVE_FLOW
-}
+};
 
 struct netstream_options {
     struct sset collectors;
@@ -67,7 +67,7 @@ struct netstream {
 
     bool log;
     char log_path[NS_MAX_PATH_LOG_LENGTH];
-    struct netsteam_db_queue ns_db_que;
+    struct netstream_db_queue ns_db_que;
 
     uint64_t inactive_timeout; /* Timeout for flows that are expired. */ 
     uint64_t active_timeout; /* Timeout for flows that are still active. */
@@ -183,14 +183,14 @@ struct netstream_db_record{
     uint8_t sample_mode;
     uint16_t sample_interval;
     char flow_type[NS_MAX_STRING_READABLE];
-}
+};
 
 struct netstream_db_queue{
     uint32_t front;
     uint32_t rear;
     uint32_t maxlength;
     struct netstream_db_record *ns_db_node;
-}
+};
 
 
 struct netstream *netstream_create(void);
