@@ -2,6 +2,7 @@
 #define OFPROTO_NETSTREAM_H 1
 
 #include <stdint.h>
+#include "flow.h"
 #include "sset.h"
 
 #define NS_MAX_BRIDGE_NAME_LENGTH 16
@@ -35,6 +36,40 @@ enum SAMPLE_MODE {
 enum FLOW_TYPE {
     INACTIVE_FLOW,
     ACTIVE_FLOW
+};
+
+struct netstream_db_record{
+    uint32_t src_ip;
+    uint32_t dst_ip;
+    uint16_t src_port;
+    uint16_t dst_port; 
+    uint16_t input;
+    uint16_t output;
+
+    uint64_t start_time;
+    uint64_t end_time;
+    uint32_t packet_count;
+    uint32_t byte_count;
+
+    char src_ip_port[NS_MAX_STRING_READABLE];
+    char dst_ip_port[NS_MAX_STRING_READABLE];
+    char s_time_read[NS_MAX_STRING_READABLE];
+    char e_time_read[NS_MAX_STRING_READABLE];
+    
+    uint32_t duration;
+    char protocol[NS_MAX_STRING_READABLE];
+    uint64_t bytes_per_pkt;
+    uint8_t ip_tos;
+    uint8_t sample_mode;
+    uint16_t sample_interval;
+    char flow_type[NS_MAX_STRING_READABLE];
+};
+
+struct netstream_db_queue{
+    uint32_t front;
+    uint32_t rear;
+    uint32_t maxlength;
+    struct netstream_db_record *ns_db_node;
 };
 
 struct netstream_options {
@@ -80,8 +115,6 @@ struct netstream {
     struct ofpbuf packet;         /* NetStream packet being accumulated. */
 
     struct hmap flows;            /* Contains 'netstream_flows'. */
-
-    
 
     struct ovs_refcount ref_cnt;
 };
@@ -158,42 +191,7 @@ struct netstream_v5_record {
     uint8_t  pad[2];
 };
 
-struct netstream_db_record{
-    uint32_t src_ip;
-    uint32_t dst_ip;
-    uint16_t src_port;
-    uint16_t dst_port; 
-    uint16_t input;
-    uint16_t output;
-
-    uint64_t start_time;
-    uint64_t end_time;
-    uint32_t packet_count;
-    uint32_t byte_count;
-
-    char src_ip_port[NS_MAX_STRING_READABLE];
-    char dst_ip_port[NS_MAX_STRING_READABLE];
-    char s_time_read[NS_MAX_STRING_READABLE];
-    char e_time_read[NS_MAX_STRING_READABLE];
-    
-    uint32_t duration;
-    char protocol[NS_MAX_STRING_READABLE];
-    uint64_t bytes_per_pkt;
-    uint8_t ip_tos;
-    uint8_t sample_mode;
-    uint16_t sample_interval;
-    char flow_type[NS_MAX_STRING_READABLE];
-};
-
-struct netstream_db_queue{
-    uint32_t front;
-    uint32_t rear;
-    uint32_t maxlength;
-    struct netstream_db_record *ns_db_node;
-};
-
-
-struct netstream *netstream_create(void);
+struct netstream *netstream_create(char *);
 void netstream_unref(struct netstream *);
 
 #endif /* netstream.h */

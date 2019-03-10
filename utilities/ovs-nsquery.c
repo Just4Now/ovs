@@ -11,7 +11,7 @@
 #include <termios.h>
 
 #include "sqlite3.h"
-#include "vlog.h"
+#include "openvswitch/vlog.h"
 
 #define NS_MAX_QUERY_CONDITION 8
 #define NS_MAX_INDEX_LENGTH 8
@@ -54,7 +54,7 @@ const char *condition_name = {
     "PROTOCOL",
     "START_TIME",
     "END_TIME"
-}
+};
 
 const char *index_name = {
     "",
@@ -65,7 +65,7 @@ const char *index_name = {
     "PROTOCOL_INDEX",
     "START_TIME_INDEX",
     "END_TIME_INDEX"
-}
+};
 
 enum OPTION{
     BR_NAME,
@@ -88,6 +88,8 @@ static bool ns_str2timestamp(char *, uint64_t *);
 static bool ns_check_time(struct query_conditions *);
 static void ns_query_database(struct query_conditions *);
 static void parser_commands(int , char **, struct query_conditions *);
+static void ns_query_get_table(sqlite3 *, char *, bool);
+static bool ns_query_find_best_index(sqlite3 *, struct query_conditions *, char *);
 
 char* const short_options = "";
 
@@ -370,8 +372,8 @@ ns_str2timestamp(char *str_timestamp, uint64_t *timestamp)
 static bool
 ns_check_time(struct query_conditions *q_c)
 {
-    if (q_c->q_s_cond[].is_specified[START_TIME] && q_c->q_s_cond[].is_specified[END_TIME]) {
-        if (q_c->q_s_cond[].start_time > q_c->q_s_cond[].end_time) {
+    if (q_c->q_s_cond[START_TIME].is_specified && q_c->q_s_cond[END_TIME].is_specified) {
+        if (q_c->q_s_cond[START_TIME].value > q_c->q_s_cond[END_TIME].value) {
             return false;
         }
         return true;
@@ -385,8 +387,8 @@ ns_query_database(struct query_conditions *q_c)
     char ns_log_dir_path[NS_MAX_PATH_LOG_LENGTH] = {0}; 
     char ns_log_file_path[NS_MAX_PATH_LOG_LENGTH] = {0};
     char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
-    bool q_s_cond[].is_specified = false;
     sqlite3 *db;
+    int rc;
     int n_stable = 0;
 
     DIR *ns_dir;   //描述一个打开的文件夹
@@ -414,8 +416,8 @@ ns_query_database(struct query_conditions *q_c)
 
     for(size_t i = 0; i < NS_MAX_QUERY_CONDITION; i++)
     {
-        if (q_c.q_s_cond[i].is_specified) {
-            q_c.is_specified = true;
+        if (q_c->q_s_cond[i].is_specified) {
+            q_c->is_specified = true;
             break;
         }
     }
@@ -653,6 +655,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
         }
         query_offset += NS_MAX_QUERY_ROW;
     } while (n_row != 0);
+
     quit:
     if (tcsetattr(0, TCSANOW, &init_setting) != 0)
     {

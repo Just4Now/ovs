@@ -8,11 +8,14 @@
 #include <sys/types.h>
 #include <assert.h>
 
+#include "collectors.h"
 #include "openvswitch/ofpbuf.h"
-#include "netstream.h"
+#include "openvswitch/vlog.h"
+#include "ofproto/netstream.h"
+#include "timeval.h"
 #include "sqlite3.h"
 #include "dirs.h"
-#include "vlog.h"
+
 
 
 VLOG_DEFINE_THIS_MODULE(netstream);
@@ -21,7 +24,7 @@ static struct ovs_mutex mutex = OVS_MUTEX_INITIALIZER;
 static atomic_count netstream_count = ATOMIC_COUNT_INIT(0);
 static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
 
-const char sql_index_name[] = {
+const char *sql_index_name[] = {
     "SRC_IP_INDEX", "SRC_IP",
     "DST_IP_INDEX", "DST_IP",
     "SRC_PORT_INDEX", "SRC_PORT"
@@ -29,7 +32,7 @@ const char sql_index_name[] = {
     "PROTOCOL_INDEX", "PROTOCOL"
     "START_TIME_INDEX", "START_TIME"
     "END_TIME_INDEX", "END_TIME"
-}
+};
 
 struct netstream *
 netstream_create(char *bridge_name)
@@ -38,7 +41,7 @@ netstream_create(char *bridge_name)
 
     memset(ns->bridge_name, 0, sizeof(ns->bridge_name));
     memset(ns->log_path, 0, sizeof(ns->log_path));
-    memset(ns->ns_db_que, 0, sizeof(ns->ns_db_queue));
+    memset(&ns->ns_db_que, 0, sizeof(ns->ns_db_que));
     strcpy(ns->bridge_name, bridge_name);
     ns->engine_type = 0;
     ns->engine_id = 0;
@@ -53,7 +56,7 @@ netstream_create(char *bridge_name)
     ofpbuf_init(&ns->packet, 1500);
     atomic_count_inc(&netstream_count);
     return ns;
-}
+};
 
 int
 netstream_set_options(struct netstream *ns,
@@ -167,7 +170,6 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         }
         /* 活跃流老化 */
         if (now > ns_flow->last_expired + ns->active_timeout) {
-            memset(ns_db_record, 0, sizeof ns_db_record);
             netstream_expire__(ns, ns_flow, ACTIVE_FLOW);
         }
     }
@@ -189,12 +191,12 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         }else{
             rc = sqlite3_exec(db, "PRRAGMA synchronous = OFF", 0, 0, &errmsg);  //关闭同步
             if (rc != SQLITE_OK) {  //关闭同步失败
-                VLOG_ERR_RL(&rl, "Turn off synchronous failed.(Error message:%s)", db_file_path，errmsg);
+                VLOG_ERR_RL(&rl, "Turn off synchronous failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
             rc = sqlite3_exec(db, "BEGIN", 0, 0, &errmsg); //开启事务
             if (rc != SQLITE_OK) {  //开启事务失败
-                VLOG_ERR_RL(&rl, "Excuting begin failed.(Error message:%s)", db_file_path，errmsg);
+                VLOG_ERR_RL(&rl, "Excuting begin failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }
@@ -203,20 +205,20 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         {
             rc = sqlite3_exec(db, "COMMIT", 0, 0, &errmsg); //提交事务
             if (rc != SQLITE_OK) {  //提交事务失败
-                VLOG_ERR_RL(&rl, "Excuting commit failed.(Error message:%s)", db_file_path，errmsg);
+                VLOG_ERR_RL(&rl, "Excuting commit failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }else
         {
             rc = sqlite3_exec(db, "ROLLBACK", 0, 0, &errmsg); //提交事务
             if (rc != SQLITE_OK) {  //提交事务失败
-                VLOG_ERR_RL(&rl, "Excuting rollback failed.(Error message:%s)", db_file_path，errmsg);
+                VLOG_ERR_RL(&rl, "Excuting rollback failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }
 
         err_excute:
-        sqlite3_free(zErrMsg);
+        sqlite3_free(errmsg);
         err_open:
         sqlite3_close(db);
     }
@@ -312,9 +314,9 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, enum FLO
         struct tm s_tm, e_tm;
         time_t s_time, e_time;
 
-        memset(ns_db_record, 0, sizeof(netstream_db_record));
-        memset(s_tm, 0, sizeof(s_tm));
-        memset(e_tm, 0, sizeof(e_tm));
+        memset(&ns_db_record, 0, sizeof(ns_db_record));
+        memset(&s_tm, 0, sizeof(s_tm));
+        memset(&e_tm, 0, sizeof(e_tm));
 
         ns_db_record.src_ip = ns_rec->src_addr;
         ns_db_record.dst_ip = ns_rec->dst_addr;
@@ -337,7 +339,7 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, enum FLO
             case INACTIVE_FLOW:
                 strcpy(ns_db_record.flow_type, "inactive flow");
                 break;
-            case INACTIVE_FLOW:
+            case ACTIVE_FLOW:
                 strcpy(ns_db_record.flow_type, "active flow");
                 break;
             default:
@@ -345,37 +347,37 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, enum FLO
                 break;
         }
 
-        if (ns_flow->ip_proto == NS_TCP || ns_flow->ip_proto == NS_UDP) {
-            if (ns_flow->ip_proto == NS_TCP) {
+        if (ns_flow->nw_proto == NS_TCP || ns_flow->nw_proto == NS_UDP) {
+            if (ns_flow->nw_proto == NS_TCP) {
                 strcpy(ns_db_record.protocol, "TCP");
             }else
             {
                 strcpy(ns_db_record.protocol, "UDP");
             }         
             struct in_addr addr;
-            addr.s_addr = ns_record.src_ip;
+            addr.s_addr = ns_db_record.src_ip;
             sprintf(ns_db_record.src_ip_port, "%s:%u", inet_ntoa(addr), ns_db_record.src_port);
-            addr.s_addr = ns_record.dst_ip;
+            addr.s_addr = ns_db_record.dst_ip;
             sprintf(ns_db_record.dst_ip_port, "%s:%u", inet_ntoa(addr), ns_db_record.dst_port);
         }else
         {
-            if (ns_flow->ip_proto == NS_ICMP) {
+            if (ns_flow->nw_proto == NS_ICMP) {
                 strcpy(ns_db_record.protocol, "ICMP");
             }else
             {
                 strcpy(ns_db_record.protocol, "IP-Other");
             }
             struct in_addr addr;
-            addr.s_addr = ns_record.src_ip;
-            sprintf(ns_db_record.src_ip_port, "%s", inet_ntoa(addr);
-            addr.s_addr = ns_record.dst_ip;
-            sprintf(ns_db_record.dst_ip_port, "%s", inet_ntoa(addr);
+            addr.s_addr = ns_db_record.src_ip;
+            sprintf(ns_db_record.src_ip_port, "%s", inet_ntoa(addr));
+            addr.s_addr = ns_db_record.dst_ip;
+            sprintf(ns_db_record.dst_ip_port, "%s", inet_ntoa(addr));
         }
 
         localtime_r(&s_time, &s_tm);
         localtime_r(&e_time, &e_tm);
-        strftime(s_time_read, NS_MAX_STRING_READABLE, "%F %T", &s_tm);
-        strftime(e_time_read, NS_MAX_STRING_READABLE, "%F %T", &e_tm);
+        strftime(ns_db_record.s_time_read, NS_MAX_STRING_READABLE, "%F %T", &s_tm);
+        strftime(ns_db_record.e_time_read, NS_MAX_STRING_READABLE, "%F %T", &e_tm);
 
         if (!netstream_db_enqueue(ns->ns_db_que, &ns_db_record))
         {
@@ -414,7 +416,7 @@ netstream_create_database(struct netstream *ns)
     
     rc = sqlite3_open(db_file_path, &db);
     if (rc != SQLITE_OK) {
-        VLOG_ERR("Can't open netstream log database(%s), please" 
+        VLOG_ERR("Can't open netstream log database(%s), please " 
                  "check if it is bad.(Error message:%s)", db_file_path, sqlite3_errmsg(db);
         goto err_open;
     }
@@ -650,7 +652,8 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
 void
 netstream_log_path_init(struct netstream *ns)
 {
-    char ns_log_dir[NS_MAX_PATH_LOG_LENGTH] = {0}; 
+    char ns_log_dir[NS_MAX_PATH_LOG_LENGTH] = {0};
+
     sprintf(ns_log_dir, "%s/NetStream", ovs_pkgdatadir());  /* /usr/local/share/openvswitch */
     
     /* 文件夹不存在时则创建该目录 */
