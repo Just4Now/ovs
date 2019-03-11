@@ -37,6 +37,8 @@ static inline int netstream_db_enqueue(struct netstream_db_queue *, struct netst
 static inline bool netstream_db_dequeue(struct netstream_db_queue *, struct netstream_db_record *);
 static bool netstream_write_into_db(sqlite3 *, struct netstream *);
 static void netstream_log_path_init(struct netstream *);
+static struct netstream_flow *netstream_flow_lookup(const struct netstream *, const struct flow *);
+static uint32_t netstream_flow_hash(const struct flow *);
 
 static struct ovs_mutex mutex = OVS_MUTEX_INITIALIZER;
 static atomic_count netstream_count = ATOMIC_COUNT_INIT(0);
@@ -688,4 +690,137 @@ netstream_log_path_init(struct netstream *ns)
     }
     strcpy(ns->log_path, ns_log_dir);
     return;
+}
+
+void
+netstream_flow_update(struct netstream *ns, const struct flow *flow,
+                    ofp_port_t output_iface,
+                    const struct dpif_flow_stats *stats)
+    OVS_EXCLUDED(mutex)
+{
+    struct netstream_flow *ns_flow;
+    uint32_t n_bytes;
+    long long int used;
+
+    /* NetStream only reports on IP packets. */
+    if (flow->dl_type != htons(ETH_TYPE_IP)) {
+        return;
+    }
+
+    ovs_mutex_lock(&mutex);
+    ns_flow = netstream_flow_lookup(ns, flow);
+    if (!ns_flow) {
+        ns_flow = xzalloc(sizeof *ns_flow);
+        ns_flow->in_port = flow->in_port.ofp_port;
+        ns_flow->nw_src = flow->nw_src;
+        ns_flow->nw_dst = flow->nw_dst;
+        ns_flow->nw_tos = flow->nw_tos;
+        ns_flow->nw_proto = flow->nw_proto;
+        ns_flow->tp_src = flow->tp_src;
+        ns_flow->tp_dst = flow->tp_dst;
+        ns_flow->created = stats->used;
+        ns_flow->output_iface = output_iface;
+        hmap_insert(&ns->flows, &ns_flow->hmap_node, netstream_flow_hash(flow));
+    }
+
+
+    /* 对于TCP连接，当有标志为FIN或RST的报文发送时，表示一次会话结束。当一条已经存在的NetStream流中流过
+    一条标志为FIN或RST的报文时，可以立即老化相应的NetStream流，节省内存空间。因此建议在设备上开启由TCP
+    连接的FIN和RST报文触发老化的老化方式。 */
+    if (ns_flow->nw_proto == NS_TCP && ns_flow->packet_count > 1 &&
+        (stats->tcp_flags & (TCP_FIN | TCP_RST)) {
+        netstream_expire__(ns, ns_flow);
+        hmap_remove(&ns->flows, &ns_flow->hmap_node);
+        free(ns_flow);
+        goto end;
+    }
+
+    if (ns_flow->output_iface != output_iface) {
+        netstream_expire__(ns, ns_flow);
+        ns_flow->created = stats->used;
+        ns_flow->output_iface = output_iface;
+    }
+
+    /* 字节数翻转了直接进行老化 */
+    n_bytes = ns_flow->byte_count + stats->n_bytes;
+    if (n_bytes < ns_flow->byte_count && n_bytes < stats->n_bytes) {
+        netstream_expire__(ns, ns_flow);
+    }
+
+    ns_flow->packet_count += stats->n_packets;
+    ns_flow->tcp_flags |= stats->tcp_flags;
+
+    used = MAX(ns_flow->used, stats->used);
+    if (ns_flow->used != used) {
+        ns_flow->used = used;
+        if (!ns->active_timeout || !ns_flow->last_expired
+            || ns->reconfig_time > ns_flow->last_expired) {
+            /* Keep the time updated to prevent a flood of expiration in
+             * the future. */
+            ns_flow->last_expired = time_msec();
+        }
+    }
+
+    end:
+    ovs_mutex_unlock(&mutex);
+}
+
+static struct netstream_flow *
+netstream_flow_lookup(const struct netstream *ns, const struct flow *flow)
+    OVS_REQUIRES(mutex)
+{
+    struct netstream_flow *ns_flow;
+
+    HMAP_FOR_EACH_WITH_HASH (ns_flow, hmap_node, netstream_flow_hash(flow),
+                             &nf->flows) {
+        if (flow->in_port.ofp_port == ns_flow->in_port
+            && flow->nw_src == ns_flow->nw_src
+            && flow->nw_dst == ns_flow->nw_dst
+            && flow->nw_tos == ns_flow->nw_tos
+            && flow->nw_proto == ns_flow->nw_proto
+            && flow->tp_src == ns_flow->tp_src
+            && flow->tp_dst == ns_flow->tp_dst) {
+            return ns_flow;
+        }
+    }
+    return NULL;
+}
+
+static uint32_t
+netstream_flow_hash(const struct flow *flow)
+{
+    uint32_t hash = 0;
+
+    hash = hash_add(hash, (OVS_FORCE uint32_t) flow->in_port.ofp_port);
+    hash = hash_add(hash, ntohl(flow->nw_src));
+    hash = hash_add(hash, ntohl(flow->nw_dst));
+    hash = hash_add(hash, flow->nw_tos);
+    hash = hash_add(hash, flow->nw_proto);
+    hash = hash_add(hash, ntohs(flow->tp_src));
+    hash = hash_add(hash, ntohs(flow->tp_dst));
+
+    return hash_finish(hash, 28);
+}
+
+struct netstream *
+netstream_ref(const struct netstream *ns_)
+{
+    struct netstream *ns = CONST_CAST(struct netstream *, ns_);
+    if (ns) {
+        ovs_refcount_ref(&ns->ref_cnt);
+    }
+    return ns;
+}
+
+void
+netstream_mask_wc(const struct flow *flow, struct flow_wildcards *wc)
+{
+    if (flow->dl_type != htons(ETH_TYPE_IP)) {
+        return;
+    }
+    memset(&wc->masks.nw_proto, 0xff, sizeof wc->masks.nw_proto);
+    memset(&wc->masks.nw_src, 0xff, sizeof wc->masks.nw_src);
+    memset(&wc->masks.nw_dst, 0xff, sizeof wc->masks.nw_dst);
+    flow_unwildcard_tp_ports(flow, wc);
+    wc->masks.nw_tos |= IP_DSCP_MASK;
 }
