@@ -261,8 +261,6 @@ lib_libopenvswitch_la_SOURCES = \
 	lib/socket-util.h \
 	lib/sort.c \
 	lib/sort.h \
-	lib/sqlite3.c \
-	lib/sqlite3.h \
 	lib/sset.c \
 	lib/sset.h \
 	lib/stp.c \

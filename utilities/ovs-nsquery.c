@@ -11,7 +11,8 @@
 #include <termios.h>
 
 #include "sqlite3.h"
-#include "openvswitch/vlog.h"
+//#include "dirs.h"
+//#include "openvswitch/vlog.h"
 
 #define NS_MAX_QUERY_CONDITION 8
 #define NS_MAX_INDEX_LENGTH 8
@@ -395,8 +396,10 @@ ns_query_database(struct query_conditions *q_c)
     struct dirent *ns_ptr;
 
     memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
-    
-    sprintf(ns_log_dir_path, "%s/NetStream", ovs_pkgdatadir());  /* /usr/local/share/openvswitch */
+
+
+    sprintf(ns_log_dir_path, "%s/NetStream", "/usr/local/share/openvswitch");
+    //sprintf(ns_log_dir_path, "%s/NetStream", ovs_pkgdatadir());  /* /usr/local/share/openvswitch */
 
     if ((ns_dir = opendir(ns_log_dir_path)) == NULL)
     {
