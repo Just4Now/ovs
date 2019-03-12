@@ -705,11 +705,17 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     /* NetStream only reports on IP packets. */
     if (flow->dl_type != htons(ETH_TYPE_IP)) {
         return;
-    }
+    }    
 
     ovs_mutex_lock(&mutex);
     ns_flow = netstream_flow_lookup(ns, flow);
     if (!ns_flow) {
+        
+        if (hmap_count(ns->flows) >= ns->flow_cache_number) {
+            printf("The maximum number of streams has been reached\n");
+            goto end;
+        } 
+
         ns_flow = xzalloc(sizeof *ns_flow);
         ns_flow->in_port = flow->in_port.ofp_port;
         ns_flow->nw_src = flow->nw_src;
@@ -722,7 +728,6 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
         ns_flow->output_iface = output_iface;
         hmap_insert(&ns->flows, &ns_flow->hmap_node, netstream_flow_hash(flow));
     }
-
 
     /* 对于TCP连接，当有标志为FIN或RST的报文发送时，表示一次会话结束。当一条已经存在的NetStream流中流过
     一条标志为FIN或RST的报文时，可以立即老化相应的NetStream流，节省内存空间。因此建议在设备上开启由TCP
@@ -823,4 +828,14 @@ netstream_mask_wc(const struct flow *flow, struct flow_wildcards *wc)
     memset(&wc->masks.nw_dst, 0xff, sizeof wc->masks.nw_dst);
     flow_unwildcard_tp_ports(flow, wc);
     wc->masks.nw_tos |= IP_DSCP_MASK;
+}
+
+uint32_t
+netstream_get_probability(const struct netstream *ns) OVS_EXCLUDED(mutex)
+{
+    uint32_t probability;
+    ovs_mutex_lock(&mutex);
+    probability = UINT32_MAX / ns->sample_interval;
+    ovs_mutex_unlock(&mutex);
+    return probability;
 }

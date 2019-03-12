@@ -200,5 +200,6 @@ void netstream_wait(struct netstream *);
 void netstream_flow_update(struct netstream *, const struct flow *, ofp_port_t, const struct dpif_flow_stats *);
 struct netstream *netstream_ref(const struct netstream *);
 void netstream_mask_wc(const struct flow *, struct flow_wildcards *);
+uint32_t netstream_get_probability(const struct netstream *ns);
 
 #endif /* netstream.h */
