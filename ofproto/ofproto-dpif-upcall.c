@@ -231,6 +231,7 @@ struct upcall {
 
     struct dpif_ipfix *ipfix;      /* IPFIX pointer or NULL. */
     struct dpif_sflow *sflow;      /* SFlow pointer or NULL. */
+    struct netsttram *netstream;
 
     struct udpif_key *ukey;        /* Revalidator flow cache. */
     bool ukey_persists;            /* Set true to keep 'ukey' beyond the
@@ -1040,7 +1041,7 @@ classify_upcall(enum dpif_upcall_type type, const struct nlattr *userdata,
     if (cookie->type == USER_ACTION_COOKIE_SFLOW) {
         return SFLOW_UPCALL;
     } else if (cookie->type == USER_ACTION_COOKIE_SLOW_PATH) {
-        return NESTREAM_UPCALL;
+        return NETSTREAM_UPCALL;
     } else if (cookie->type == USER_ACTION_COOKIE_SLOW_PATH) {
         return SLOW_PATH_UPCALL;
     } else if (cookie->type == USER_ACTION_COOKIE_FLOW_SAMPLE) {
@@ -1432,7 +1433,7 @@ process_upcall(struct udpif *udpif, struct upcall *upcall,
         }
         break;
     case NETSTREAM_UPCALL:
-        if (upcall->netstram) {
+        if (upcall->netstream) {
             struct dpif_flow_stats stats;
             stats.n_packets = 1;
             stats.n_bytes = dp_packet_size(packet);
@@ -1440,7 +1441,7 @@ process_upcall(struct udpif *udpif, struct upcall *upcall,
             stats.tcp_flags = ntohs(flow->tcp_flags);
 
             netstream_flow_update(upcall->netstream, flow, 
-                                  upcall->cookie.netstream.output, stats);
+                                  upcall->cookie.netstream.output, &stats);
         }
         break;
     case IPFIX_UPCALL:
@@ -2114,7 +2115,7 @@ xlate_key(struct udpif *udpif, const struct nlattr *key, unsigned int len,
     }
 
     error = xlate_lookup(udpif->backer, &ctx->flow, &ofproto, NULL, NULL,
-                         ctx->netflow, &ofp_in_port);
+                         ctx->netflow, NULL, &ofp_in_port);
     if (error) {
         return error;
     }

@@ -36,7 +36,10 @@ enum SAMPLE_MODE {
 
 enum FLOW_TYPE {
     INACTIVE_FLOW,
-    ACTIVE_FLOW
+    ACTIVE_FLOW,
+    TCP_FLAGS,
+    OUTPUT_CH,
+    BYTES_WRAPPED
 };
 
 struct netstream_db_record{

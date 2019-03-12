@@ -116,6 +116,7 @@ struct xbridge {
     struct dpif_sflow *sflow;     /* SFlow handle, or null. */
     struct dpif_ipfix *ipfix;     /* Ipfix handle, or null. */
     struct netflow *netflow;      /* Netflow handle, or null. */
+    struct netstream *netstream;
     struct stp *stp;              /* STP or null if disabled. */
     struct rstp *rstp;            /* RSTP or null if disabled. */
 
@@ -986,7 +987,7 @@ xlate_xbridge_set(struct xbridge *xbridge,
     }
 
     if (xbridge->netstream != netstream) {
-        netflow_unref(xbridge->netstream);
+        netstream_unref(xbridge->netstream);
         xbridge->netstream = netstream_ref(netstream);
     }
 
@@ -1557,7 +1558,7 @@ xlate_lookup_ofproto(const struct dpif_backer *backer, const struct flow *flow,
 int
 xlate_lookup(const struct dpif_backer *backer, const struct flow *flow,
              struct ofproto_dpif **ofprotop, struct dpif_ipfix **ipfix,
-             struct dpif_sflow **sflow, struct netflow **netflow,
+             struct dpif_sflow **sflow, struct netflow **netflow, struct netstream **netstream,
              ofp_port_t *ofp_in_port)
 {
     struct ofproto_dpif *ofproto;
@@ -1584,6 +1585,11 @@ xlate_lookup(const struct dpif_backer *backer, const struct flow *flow,
     if (netflow) {
         *netflow = xport ? xport->xbridge->netflow : NULL;
     }
+
+    if (netstream) {
+        *netstream = xport ? xport->xbridge->netstream : NULL;
+    }
+    
 
     return 0;
 }
@@ -3249,7 +3255,7 @@ compose_netstream_action(struct xlate_ctx *ctx)
         .ofp_in_port = ctx->xin->flow.in_port.ofp_port,
         .ofproto_uuid = ctx->xbridge->ofproto->uuid
     };
-    return compose_netstream_sample_action(ctx, netstream_get_probability(sflow),
+    return compose_netstream_sample_action(ctx, netstream_get_probability(ns),
                                            &cookie, ODPP_NONE, true);
 }
 
@@ -3346,7 +3352,7 @@ fix_netstream_action(struct xlate_ctx *ctx, unsigned int user_cookie_offset)
     cookie = ofpbuf_at(ctx->odp_actions, user_cookie_offset, sizeof *cookie);
     ovs_assert(cookie->type == USER_ACTION_COOKIE_NETSTREAM);
 
-    cookie->netstream = ctx->nf_output_iface;
+    cookie->netstream.output = ctx->nf_output_iface;
 }
 
 static bool

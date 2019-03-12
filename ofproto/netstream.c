@@ -261,7 +261,7 @@ netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, enum FL
     }
 
     /* 生成netstream record */        
-    gen_netstream_rec(ns, ns_flow, ACTIVE_FLOW);
+    gen_netstream_rec(ns, ns_flow, flow_type);
 
     /* Update flow tracking data. */
     ns_flow->packet_count = 0;
@@ -361,6 +361,11 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, enum FLO
                 break;
             case ACTIVE_FLOW:
                 strcpy(ns_db_record.flow_type, "active flow");
+                break;
+            case TCP_FLAGS:
+            case OUTPUT_CH:
+            case BYTES_WRAPPED:
+                strcpy(ns_db_record.flow_type, "others");
                 break;
             default:
                 assert(0);
@@ -711,7 +716,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     ns_flow = netstream_flow_lookup(ns, flow);
     if (!ns_flow) {
         
-        if (hmap_count(ns->flows) >= ns->flow_cache_number) {
+        if (hmap_count(&ns->flows) >= ns->flow_cache_number) {
             printf("The maximum number of streams has been reached\n");
             goto end;
         } 
@@ -733,15 +738,15 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     一条标志为FIN或RST的报文时，可以立即老化相应的NetStream流，节省内存空间。因此建议在设备上开启由TCP
     连接的FIN和RST报文触发老化的老化方式。 */
     if (ns_flow->nw_proto == NS_TCP && ns_flow->packet_count > 1 &&
-        (stats->tcp_flags & (TCP_FIN | TCP_RST)) {
-        netstream_expire__(ns, ns_flow);
+        (stats->tcp_flags & (TCP_FIN | TCP_RST))) {
+        netstream_expire__(ns, ns_flow, TCP_FLAGS);
         hmap_remove(&ns->flows, &ns_flow->hmap_node);
         free(ns_flow);
         goto end;
     }
 
     if (ns_flow->output_iface != output_iface) {
-        netstream_expire__(ns, ns_flow);
+        netstream_expire__(ns, ns_flow, OUTPUT_CH);
         ns_flow->created = stats->used;
         ns_flow->output_iface = output_iface;
     }
@@ -749,7 +754,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     /* 字节数翻转了直接进行老化 */
     n_bytes = ns_flow->byte_count + stats->n_bytes;
     if (n_bytes < ns_flow->byte_count && n_bytes < stats->n_bytes) {
-        netstream_expire__(ns, ns_flow);
+        netstream_expire__(ns, ns_flow, BYTES_WRAPPED);
     }
 
     ns_flow->packet_count += stats->n_packets;
@@ -759,7 +764,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     if (ns_flow->used != used) {
         ns_flow->used = used;
         if (!ns->active_timeout || !ns_flow->last_expired
-            || ns->reconfig_time > ns_flow->last_expired) {
+            || ns->reconfig_active_timeout > ns_flow->last_expired) {
             /* Keep the time updated to prevent a flood of expiration in
              * the future. */
             ns_flow->last_expired = time_msec();
@@ -777,7 +782,7 @@ netstream_flow_lookup(const struct netstream *ns, const struct flow *flow)
     struct netstream_flow *ns_flow;
 
     HMAP_FOR_EACH_WITH_HASH (ns_flow, hmap_node, netstream_flow_hash(flow),
-                             &nf->flows) {
+                             &ns->flows) {
         if (flow->in_port.ofp_port == ns_flow->in_port
             && flow->nw_src == ns_flow->nw_src
             && flow->nw_dst == ns_flow->nw_dst
