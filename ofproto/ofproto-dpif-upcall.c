@@ -231,7 +231,7 @@ struct upcall {
 
     struct dpif_ipfix *ipfix;      /* IPFIX pointer or NULL. */
     struct dpif_sflow *sflow;      /* SFlow pointer or NULL. */
-    struct netsttram *netstream;
+    struct netstream *netstream;
 
     struct udpif_key *ukey;        /* Revalidator flow cache. */
     bool ukey_persists;            /* Set true to keep 'ukey' beyond the

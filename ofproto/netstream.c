@@ -24,9 +24,9 @@
 VLOG_DEFINE_THIS_MODULE(netstream);
 
 static void netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex);
-static void netstream_expire__(struct netstream *, struct netstream_flow *, EXPIRED_TYPE)
+static void netstream_expire__(struct netstream *, struct netstream_flow *, enum EXPIRED_TYPE)
     OVS_REQUIRES(mutex);
-static void gen_netstream_rec(struct netstream *, struct netstream_flow *, EXPIRED_TYPE)
+static void gen_netstream_rec(struct netstream *, struct netstream_flow *)
     OVS_REQUIRES(mutex);
 static void netstream_create_database(struct netstream *);
 static inline void netstream_db_createque(struct netstream_db_queue *, int);
@@ -245,14 +245,14 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
 }
 
 static void
-netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, EXPIRED_TYPEexpired_type)
+netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, enum EXPIRED_TYPE expired_type)
     OVS_REQUIRES(mutex)
 {
     uint64_t pkts;
 
     pkts = ns_flow->packet_count;
 
-    if (flow_type == ACTIVE_FLOW) {
+    if (expired_type == ACTIVE_FLOW) {
         ns_flow->last_expired += ns->active_timeout;    //更新上一次超时的时间
     }
 
@@ -261,7 +261,7 @@ netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, EXPIRED
     }
 
     /* 生成netstream record */        
-    gen_netstream_rec(ns, ns_flow,expired_type);
+    gen_netstream_rec(ns, ns_flow);
 
     /* Update flow tracking data. */
     ns_flow->packet_count = 0;
@@ -270,7 +270,7 @@ netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, EXPIRED
 }
 
 static void
-gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, EXPIRED_TYPEexpired_type)
+gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
     OVS_REQUIRES(mutex)
 {
     struct netstream_v5_header *ns_hdr;
