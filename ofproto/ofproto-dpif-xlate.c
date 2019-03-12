@@ -596,6 +596,7 @@ static void xlate_xbridge_set(struct xbridge *, struct dpif *,
                               const struct dpif_sflow *,
                               const struct dpif_ipfix *,
                               const struct netflow *,
+                              const struct netstream *,
                               bool forward_bpdu, bool has_in_band,
                               const struct dpif_backer_support *,
                               const struct xbridge_addr *);
@@ -939,6 +940,7 @@ xlate_xbridge_set(struct xbridge *xbridge,
                   const struct dpif_sflow *sflow,
                   const struct dpif_ipfix *ipfix,
                   const struct netflow *netflow,
+                  const struct netstream *netstream,
                   bool forward_bpdu, bool has_in_band,
                   const struct dpif_backer_support *support,
                   const struct xbridge_addr *addr)
@@ -981,6 +983,11 @@ xlate_xbridge_set(struct xbridge *xbridge,
     if (xbridge->netflow != netflow) {
         netflow_unref(xbridge->netflow);
         xbridge->netflow = netflow_ref(netflow);
+    }
+
+    if (xbridge->netstream != netstream) {
+        netflow_unref(xbridge->netstream);
+        xbridge->netstream = netstream_ref(netstream);
     }
 
     if (xbridge->addr != addr) {
@@ -1079,7 +1086,7 @@ xlate_xbridge_copy(struct xbridge *xbridge)
     xlate_xbridge_set(new_xbridge,
                       xbridge->dpif, xbridge->ml, xbridge->stp,
                       xbridge->rstp, xbridge->ms, xbridge->mbridge,
-                      xbridge->sflow, xbridge->ipfix, xbridge->netflow,
+                      xbridge->sflow, xbridge->ipfix, xbridge->netflow, xbridge->netstream,
                       xbridge->forward_bpdu, xbridge->has_in_band,
                       &xbridge->support, xbridge->addr);
     LIST_FOR_EACH (xbundle, list_node, &xbridge->xbundles) {
@@ -1235,6 +1242,7 @@ xlate_ofproto_set(struct ofproto_dpif *ofproto, const char *name,
                   const struct dpif_sflow *sflow,
                   const struct dpif_ipfix *ipfix,
                   const struct netflow *netflow,
+                  const struct netstream *netstream,
                   bool forward_bpdu, bool has_in_band,
                   const struct dpif_backer_support *support)
 {
@@ -1258,7 +1266,7 @@ xlate_ofproto_set(struct ofproto_dpif *ofproto, const char *name,
     old_addr = xbridge->addr;
 
     xlate_xbridge_set(xbridge, dpif, ml, stp, rstp, ms, mbridge, sflow, ipfix,
-                      netflow, forward_bpdu, has_in_band, support,
+                      netflow, netstream, forward_bpdu, has_in_band, support,
                       xbridge_addr);
 
     if (xbridge_addr != old_addr) {
@@ -1291,6 +1299,7 @@ xlate_xbridge_remove(struct xlate_cfg *xcfg, struct xbridge *xbridge)
     dpif_sflow_unref(xbridge->sflow);
     dpif_ipfix_unref(xbridge->ipfix);
     netflow_unref(xbridge->netflow);
+    netstream_unref(xbridge->netstream);
     stp_unref(xbridge->stp);
     rstp_unref(xbridge->rstp);
     xbridge_addr_unref(xbridge->addr);
@@ -3165,6 +3174,44 @@ compose_sample_action(struct xlate_ctx *ctx,
     return cookie_offset;
 }
 
+
+static size_t
+compose_netstream_sample_action(struct xlate_ctx *ctx,
+                      const uint32_t probability,
+                      const struct user_action_cookie *cookie,
+                      const odp_port_t tunnel_out_port,
+                      bool include_actions)
+{
+    /* If the slow path meter is configured by the controller,
+     * insert a meter action before the user space action.  */
+    struct ofproto *ofproto = &ctx->xin->ofproto->up;
+    uint32_t meter_id = ofproto->slowpath_meter_id;
+
+    /* When meter action is not required, avoid generate sample action
+     * for 100% sampling rate.  */
+    size_t sample_offset = 0, actions_offset = 0;
+    sample_offset = nl_msg_start_nested(ctx->odp_actions,
+                                        OVS_ACTION_ATTR_SAMPLE);
+    nl_msg_put_u32(ctx->odp_actions, OVS_SAMPLE_ATTR_PROBABILITY,
+                   probability);
+    actions_offset = nl_msg_start_nested(ctx->odp_actions,
+                                         OVS_SAMPLE_ATTR_ACTIONS);
+
+    odp_port_t odp_port = ofp_port_to_odp_port(ctx->xbridge, 
+                                               ctx->xin->flow.in_port.ofp_port);
+    uint32_t pid = dpif_port_get_pid(ctx->xbridge->dpif, odp_port);
+    size_t cookie_offset = odp_put_userspace_action(pid, cookie,
+                                                    sizeof *cookie,
+                                                    tunnel_out_port,
+                                                    include_actions,
+                                                    ctx->odp_actions);
+
+    nl_msg_end_nested(ctx->odp_actions, actions_offset);
+    nl_msg_end_nested(ctx->odp_actions, sample_offset);
+
+    return cookie_offset;
+}
+
 /* If sFLow is not enabled, returns 0 without doing anything.
  *
  * If sFlow is enabled, appends a template "sample" action to the ODP actions
@@ -3187,6 +3234,23 @@ compose_sflow_action(struct xlate_ctx *ctx)
     };
     return compose_sample_action(ctx, dpif_sflow_get_probability(sflow),
                                  &cookie, ODPP_NONE, true);
+}
+
+static size_t
+compose_netstream_action(struct xlate_ctx *ctx)
+{
+    struct netstream *ns = ctx->xbridge->netstream;
+    if (!ns || ctx->xin->flow.in_port.ofp_port == OFPP_NONE) {
+        return 0;
+    }
+
+    struct user_action_cookie cookie = {
+        .type = USER_ACTION_COOKIE_NETSTREAM,
+        .ofp_in_port = ctx->xin->flow.in_port.ofp_port,
+        .ofproto_uuid = ctx->xbridge->ofproto->uuid
+    };
+    return compose_netstream_sample_action(ctx, netstream_get_probability(sflow),
+                                           &cookie, ODPP_NONE, true);
 }
 
 /* If flow IPFIX is enabled, make sure IPFIX flow sample action
@@ -3271,6 +3335,18 @@ fix_sflow_action(struct xlate_ctx *ctx, unsigned int user_cookie_offset)
         cookie->sflow.output = 0x80000000 | ctx->sflow_n_outputs;
         break;
     }
+}
+
+static void
+fix_netstream_action(struct xlate_ctx *ctx, unsigned int user_cookie_offset)
+{
+    const struct flow *base = &ctx->base_flow;
+    struct user_action_cookie *cookie;
+
+    cookie = ofpbuf_at(ctx->odp_actions, user_cookie_offset, sizeof *cookie);
+    ovs_assert(cookie->type == USER_ACTION_COOKIE_NETSTREAM);
+
+    cookie->netstream = ctx->nf_output_iface;
 }
 
 static bool
@@ -7056,6 +7132,10 @@ xlate_wc_init(struct xlate_ctx *ctx)
         netflow_mask_wc(&ctx->xin->flow, ctx->wc);
     }
 
+    if (ctx->xbridge->netstream) {
+        netstream_mask_wc(&ctx->xin->flow, ctx->wc);
+    }
+
     tnl_wc_init(&ctx->xin->flow, ctx->wc);
 }
 
@@ -7377,8 +7457,10 @@ xlate_actions(struct xlate_in *xin, struct xlate_out *xout)
     } else {
         /* Sampling is done on initial reception; don't redo after thawing. */
         unsigned int user_cookie_offset = 0;
+        unsigned int user_ns_cookie_offset = 0;
         if (!xin->frozen_state) {
             user_cookie_offset = compose_sflow_action(&ctx);
+            user_ns_cookie_offset = compose_netstream_action(&ctx);
             compose_ipfix_action(&ctx, ODPP_NONE);
         }
         size_t sample_actions_len = ctx.odp_actions->size;
@@ -7435,6 +7517,10 @@ xlate_actions(struct xlate_in *xin, struct xlate_out *xout)
 
         if (user_cookie_offset) {
             fix_sflow_action(&ctx, user_cookie_offset);
+        }
+
+        if (user_ns_cookie_offset) {
+            fix_netstream_action(&ctx, user_ns_cookie_offset);
         }
     }
 
