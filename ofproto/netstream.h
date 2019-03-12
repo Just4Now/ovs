@@ -34,12 +34,13 @@ enum SAMPLE_MODE {
     RANDOM_PACKETS
 };
 
-enum FLOW_TYPE {
+enum EXPIRED_TYPE {
     INACTIVE_FLOW,
     ACTIVE_FLOW,
     TCP_FLAGS,
     OUTPUT_CH,
-    BYTES_WRAPPED
+    BYTES_WRAPPED,
+    FORCE_EXPIRED
 };
 
 struct netstream_db_record{
@@ -66,7 +67,7 @@ struct netstream_db_record{
     uint8_t ip_tos;
     uint8_t sample_mode;
     uint16_t sample_interval;
-    char flow_type[NS_MAX_STRING_READABLE];
+    uint8_t pad[4];
 };
 
 struct netstream_db_queue{

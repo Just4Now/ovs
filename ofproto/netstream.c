@@ -24,9 +24,9 @@
 VLOG_DEFINE_THIS_MODULE(netstream);
 
 static void netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex);
-static void netstream_expire__(struct netstream *, struct netstream_flow *, enum FLOW_TYPE)
+static void netstream_expire__(struct netstream *, struct netstream_flow *, EXPIRED_TYPE)
     OVS_REQUIRES(mutex);
-static void gen_netstream_rec(struct netstream *, struct netstream_flow *, enum FLOW_TYPE)
+static void gen_netstream_rec(struct netstream *, struct netstream_flow *, EXPIRED_TYPE)
     OVS_REQUIRES(mutex);
 static void netstream_create_database(struct netstream *);
 static inline void netstream_db_createque(struct netstream_db_queue *, int);
@@ -245,7 +245,7 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
 }
 
 static void
-netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, enum FLOW_TYPE flow_type)
+netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, EXPIRED_TYPEexpired_type)
     OVS_REQUIRES(mutex)
 {
     uint64_t pkts;
@@ -261,7 +261,7 @@ netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, enum FL
     }
 
     /* 生成netstream record */        
-    gen_netstream_rec(ns, ns_flow, flow_type);
+    gen_netstream_rec(ns, ns_flow,expired_type);
 
     /* Update flow tracking data. */
     ns_flow->packet_count = 0;
@@ -270,7 +270,7 @@ netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, enum FL
 }
 
 static void
-gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, enum FLOW_TYPE flow_type)
+gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, EXPIRED_TYPEexpired_type)
     OVS_REQUIRES(mutex)
 {
     struct netstream_v5_header *ns_hdr;
@@ -353,24 +353,6 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow, enum FLO
         ns_db_record.sample_mode = (uint8_t)ns->sample_mode;
         ns_db_record.sample_interval = ns->sample_interval;
         ns_db_record.bytes_per_pkt = ns_db_record.byte_count / ns_db_record.packet_count;
-
-        switch (flow_type)
-        {
-            case INACTIVE_FLOW:
-                strcpy(ns_db_record.flow_type, "inactive flow");
-                break;
-            case ACTIVE_FLOW:
-                strcpy(ns_db_record.flow_type, "active flow");
-                break;
-            case TCP_FLAGS:
-            case OUTPUT_CH:
-            case BYTES_WRAPPED:
-                strcpy(ns_db_record.flow_type, "others");
-                break;
-            default:
-                assert(0);
-                break;
-        }
 
         if (ns_flow->nw_proto == NS_TCP || ns_flow->nw_proto == NS_UDP) {
             if (ns_flow->nw_proto == NS_TCP) {
@@ -469,8 +451,7 @@ netstream_create_database(struct netstream *ns)
             "TOS           INTEGER,"
             "SAMPLE_MODE   INTEGER,"
             "SAMPLE_INT    INTEGER,"
-            "BYTES_PER_PKT INTEGER,"
-            "FLOW_TYPE     CHAR(32));");
+            "BYTES_PER_PKT INTEGER);");
     rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
     if( rc != SQLITE_OK ){
         printf("Can't create main table netstream in %s."
@@ -586,7 +567,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
 
     memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
-    sprintf(sqlcmd, "%s", "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
+    sprintf(sqlcmd, "%s", "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
     rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_main_table, 0);
     if(rc != SQLITE_OK)
     {
@@ -633,7 +614,6 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
         sqlite3_bind_int(stmt_main_table, 19, ns_db_record.bytes_per_pkt);
         sqlite3_bind_int(stmt_main_table, 20, ns_db_record.sample_mode);
         sqlite3_bind_int(stmt_main_table, 21, ns_db_record.sample_interval);
-        sqlite3_bind_text(stmt_main_table, 22, ns_db_record.flow_type, strlen(ns_db_record.flow_type), NULL);
         rc = sqlite3_step(stmt_main_table);
         if(rc != SQLITE_OK)
         {

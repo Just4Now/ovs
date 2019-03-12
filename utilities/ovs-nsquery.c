@@ -605,9 +605,8 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
                            result[i *  n_column + 1], result[i *  n_column + 3], \
                            result[i *  n_column + 4], result[i *  n_column + 7], \
                            result[i *  n_column + 8], result[i *  n_column + 9]);
-                    printf("FlowType: %-16s     SampleMode: %-16s SampleInterval: %-5s\n", \
-                           result[i *  n_column + 15], result[i *  n_column + 12], \
-                           result[i *  n_column + 13]);
+                    printf("SampleMode: %-15s   SampleInterval: %-5s\n", 
+                           result[i *  n_column + 12], result[i *  n_column + 13]);
                     printf("Bytes: %-20s    Bytes/Pkts: %-16s Tos: %-16s\n",  \
                            result[i *  n_column + 10], result[i *  n_column + 14], \
                            result[i *  n_column + 11]);
