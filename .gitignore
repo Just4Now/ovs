@@ -77,3 +77,6 @@ testsuite.tmp.orig
 /Documentation/_build
 /.venv
 /cxx-check
+.DS_Store
+.vscode/
+lib/.DS_Store
