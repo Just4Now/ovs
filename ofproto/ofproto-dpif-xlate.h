@@ -172,7 +172,7 @@ void xlate_ofproto_set(struct ofproto_dpif *, const char *name, struct dpif *,
                        const struct mac_learning *, struct stp *,
                        struct rstp *, const struct mcast_snooping *,
                        const struct mbridge *, const struct dpif_sflow *,
-                       const struct dpif_ipfix *, const struct netflow *,
+                       const struct dpif_ipfix *, const struct netflow *, const struct netstream *,
                        bool forward_bpdu, bool has_in_band,
                        const struct dpif_backer_support *support);
 void xlate_remove_ofproto(struct ofproto_dpif *);
@@ -202,7 +202,7 @@ struct ofproto_dpif * xlate_lookup_ofproto(const struct dpif_backer *,
                                            ofp_port_t *ofp_in_port);
 int xlate_lookup(const struct dpif_backer *, const struct flow *,
                  struct ofproto_dpif **, struct dpif_ipfix **,
-                 struct dpif_sflow **, struct netflow **,
+                 struct dpif_sflow **, struct netflow **, struct netstream **,
                  ofp_port_t *ofp_in_port);
 
 enum xlate_error {

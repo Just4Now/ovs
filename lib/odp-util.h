@@ -297,6 +297,7 @@ enum slow_path_reason commit_odp_actions(const struct flow *,
 enum user_action_cookie_type {
     USER_ACTION_COOKIE_UNSPEC,
     USER_ACTION_COOKIE_SFLOW,        /* Packet for per-bridge sFlow sampling. */
+    USER_ACTION_COOKIE_NETSTREAM,
     USER_ACTION_COOKIE_SLOW_PATH,    /* Userspace must process this flow. */
     USER_ACTION_COOKIE_FLOW_SAMPLE,  /* Packet for per-flow sampling. */
     USER_ACTION_COOKIE_IPFIX,        /* Packet for per-bridge IPFIX sampling. */
@@ -315,6 +316,11 @@ struct user_action_cookie {
             ovs_be16 vlan_tci;      /* Destination VLAN TCI. */
             uint32_t output;        /* SFL_FLOW_SAMPLE_TYPE 'output' value. */
         } sflow;
+
+        struct 
+        {
+            uint32_t output;
+        } netstream;
 
         struct {
             /* USER_ACTION_COOKIE_SLOW_PATH. */

@@ -453,7 +453,7 @@ type_run(const char *type)
                               ofproto->backer->dpif, ofproto->ml,
                               ofproto->stp, ofproto->rstp, ofproto->ms,
                               ofproto->mbridge, ofproto->sflow, ofproto->ipfix,
-                              ofproto->netflow,
+                              ofproto->netflow, ofproto->netstream, 
                               ofproto->up.forward_bpdu,
                               connmgr_has_in_band(ofproto->up.connmgr),
                               &ofproto->backer->rt_support);
@@ -1427,6 +1427,7 @@ construct(struct ofproto *ofproto_)
     uuid_generate(&ofproto->uuid);
     atomic_init(&ofproto->tables_version, OVS_VERSION_MIN);
     ofproto->netflow = NULL;
+    ofproto->netstream = NULL;
     ofproto->sflow = NULL;
     ofproto->ipfix = NULL;
     ofproto->stp = NULL;
@@ -1595,6 +1596,7 @@ destruct(struct ofproto *ofproto_, bool del)
     mbridge_unref(ofproto->mbridge);
 
     netflow_unref(ofproto->netflow);
+    netstream_unref(ofproto->netstream);
     dpif_sflow_unref(ofproto->sflow);
     dpif_ipfix_unref(ofproto->ipfix);
     hmap_destroy(&ofproto->bundles);

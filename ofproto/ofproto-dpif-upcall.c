@@ -191,6 +191,7 @@ enum upcall_type {
     MISS_UPCALL,                /* A flow miss.  */
     SLOW_PATH_UPCALL,           /* Slow path upcall.  */
     SFLOW_UPCALL,               /* sFlow sample. */
+    NETSTREAM_UPCALL,           /* NetStream sampling. */
     FLOW_SAMPLE_UPCALL,         /* Per-flow sampling. */
     IPFIX_UPCALL,               /* Per-bridge sampling. */
     CONTROLLER_UPCALL           /* Destined for the controller. */
@@ -1039,6 +1040,8 @@ classify_upcall(enum dpif_upcall_type type, const struct nlattr *userdata,
     if (cookie->type == USER_ACTION_COOKIE_SFLOW) {
         return SFLOW_UPCALL;
     } else if (cookie->type == USER_ACTION_COOKIE_SLOW_PATH) {
+        return NESTREAM_UPCALL;
+    } else if (cookie->type == USER_ACTION_COOKIE_SLOW_PATH) {
         return SLOW_PATH_UPCALL;
     } else if (cookie->type == USER_ACTION_COOKIE_FLOW_SAMPLE) {
         return FLOW_SAMPLE_UPCALL;
@@ -1113,7 +1116,7 @@ upcall_receive(struct upcall *upcall, const struct dpif_backer *backer,
         return EAGAIN;
     } else if (upcall->type == MISS_UPCALL) {
         error = xlate_lookup(backer, flow, &upcall->ofproto, &upcall->ipfix,
-                             &upcall->sflow, NULL, &upcall->ofp_in_port);
+                             &upcall->sflow, NULL, &upcall->netstream, &upcall->ofp_in_port);
         if (error) {
             return error;
         }
@@ -1127,6 +1130,7 @@ upcall_receive(struct upcall *upcall, const struct dpif_backer *backer,
         upcall->ofproto = ofproto;
         upcall->ipfix = ofproto->ipfix;
         upcall->sflow = ofproto->sflow;
+        upcall->netstream = ofproto->netstream;
         upcall->ofp_in_port = upcall->cookie.ofp_in_port;
     }
 
@@ -1427,7 +1431,18 @@ process_upcall(struct udpif *udpif, struct upcall *upcall,
                                 actions_len > 0 ? &sflow_actions : NULL);
         }
         break;
+    case NETSTREAM_UPCALL:
+        if (upcall->netstram) {
+            struct dpif_flow_stats stats;
+            stats.n_packets = 1;
+            stats.n_bytes = dp_packet_size(packet);
+            stats.used = time_msec();
+            stats.tcp_flags = ntohs(flow->tcp_flags);
 
+            netstream_flow_update(upcall->netstream, flow, 
+                                  upcall->cookie.netstream.output, stats);
+        }
+        break;
     case IPFIX_UPCALL:
     case FLOW_SAMPLE_UPCALL:
         if (upcall->ipfix) {
