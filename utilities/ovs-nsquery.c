@@ -9,7 +9,6 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <termios.h>
-#include <config.h>
 
 #include "sqlite3.h"
 #include "dirs.h"

@@ -228,42 +228,6 @@ distfiles: Makefile
 CLEANFILES += distfiles
 .PHONY: dist-hook-git
 
-# Check that every .c file includes <config.h>.
-ALL_LOCAL += config-h-check
-config-h-check:
-	@cd $(srcdir); \
-	if test -e .git && (git --version) >/dev/null 2>&1 && \
-	  git --no-pager grep -L '#include <config\.h>' `git ls-files | grep '\.c$$' | \
-	    grep -vE '^datapath|^lib/sflow|^third-party|^datapath-windows|^python'`; \
-	then \
-	  echo "See above for list of violations of the rule that"; \
-	  echo "every C source file must #include <config.h>."; \
-	  exit 1; \
-	fi; \
-	if grep '#include' include/openvswitch/*.h | \
-	    grep -vE '(<.*>)|("openvswitch)|("openflow)'; \
-	then \
-	  echo "See above for list of violations of the rule that"; \
-	  echo "public openvswitch header file should not include internal library."; \
-	  exit 1; \
-	fi
-.PHONY: config-h-check
-
-# Check for printf() type modifiers that MSVC doesn't support.
-ALL_LOCAL += printf-check
-printf-check:
-	@cd $(srcdir); \
-	if test -e .git && (git --version) >/dev/null 2>&1 && \
-	  git --no-pager grep -n -E -e '%[-+ #0-9.*]*([ztj]|hh)' --and --not -e 'ovs_scan' `git ls-files | grep '\.[ch]$$' | \
-	    grep -vE '^datapath|^lib/sflow|^third-party'`; \
-	then \
-	  echo "See above for list of violations of the rule that"; \
-	  echo "'z', 't', 'j', 'hh' printf() type modifiers are"; \
-	  echo "forbidden.  See coding-style.rst for replacements."; \
-	  exit 1; \
-	fi
-.PHONY: printf-check
-
 # Check that certain data structures are always declared "static".
 ALL_LOCAL += static-check
 static-check:

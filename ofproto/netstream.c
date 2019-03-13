@@ -7,7 +7,6 @@
 #include <sys/types.h>
 #include <assert.h>
 #include <unistd.h>
-#include <config.h>
 
 #include "collectors.h"
 #include "dpif.h"
