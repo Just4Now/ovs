@@ -192,42 +192,6 @@ clean-pycov:
 CLEAN_LOCAL += clean-pycov
 .PHONY: clean-pycov
 
-# If we're checked out from a Git repository, make sure that every
-# file that is in Git is distributed.
-ALL_LOCAL += dist-hook-git
-dist-hook-git: distfiles
-	@if test -e $(srcdir)/.git && (git --version) >/dev/null 2>&1; then \
-	  (cd datapath && $(MAKE) distfiles); \
-	  (cat distfiles; sed 's|^|datapath/|' datapath/distfiles) | \
-	    LC_ALL=C sort -u > all-distfiles; \
-	  (cd $(srcdir) && git ls-files) | grep -v '\.gitignore$$' | \
-	    grep -v '\.gitattributes$$' | \
-	    LC_ALL=C sort -u > all-gitfiles; \
-	  LC_ALL=C comm -1 -3 all-distfiles all-gitfiles > missing-distfiles; \
-	  if test -s missing-distfiles; then \
-	    echo "The following files are in git but not the distribution:"; \
-	    cat missing-distfiles; \
-	    exit 1; \
-	  fi; \
-	  if LC_ALL=C grep '\.gitignore$$' all-distfiles; then \
-	    echo "See above for list of files that are distributed but"; \
-	    echo "should not be."; \
-	    exit 1; \
-	  fi \
-	fi
-CLEANFILES += all-distfiles all-gitfiles missing-distfiles
-# The following is based on commands for the Automake "distdir" target.
-distfiles: Makefile
-	@srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
-	topsrcdirstrip=`echo "$(top_srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
-	list='$(DISTFILES)'; \
-	for file in $$list; do echo $$file; done | \
-	  sed -e "s|^$$srcdirstrip/||;t" \
-	      -e "s|^$$topsrcdirstrip/|$(top_builddir)/|;t" | \
-	  LC_ALL=C sort -u > $@
-CLEANFILES += distfiles
-.PHONY: dist-hook-git
-
 # Check that certain data structures are always declared "static".
 ALL_LOCAL += static-check
 static-check:
@@ -239,19 +203,6 @@ static-check:
 	  exit 1; \
 	fi
 .PHONY: static-check
-
-# Check that assert.h is not used outside a whitelist of files.
-ALL_LOCAL += check-assert-h-usage
-check-assert-h-usage:
-	@if test -e $(srcdir)/.git && (git --version) >/dev/null 2>&1 && \
-	  (cd $(srcdir) && git --no-pager grep -l -E '[<]assert.h[>]') | \
-	  $(EGREP) -v '^lib/(sflow_receiver|vlog).c$$|^tests/'; \
-	then \
-	  echo "Files listed above unexpectedly #include <""assert.h"">."; \
-	  echo "Please use ovs_assert (from util.h) instead of assert."; \
-	  exit 1; \
-	fi
-.PHONY: check-assert-h-usage
 
 # Check that LITTLE_ENDIAN and BIG_ENDIAN are not used unless BYTE_ORDER is
 # also mentioned.  (<endian.h> always defines the former two constants.  They
@@ -280,37 +231,6 @@ check-echo-n:
 	  exit 1; \
 	fi
 .PHONY: check-echo-n
-
-ALL_LOCAL += check-tabs
-check-tabs:
-	@cd $(srcdir); \
-	if test -e .git && (git --version) >/dev/null 2>&1 && \
-	  grep -ln "^	" \
-	    `git ls-files \
-	      | grep -v -f build-aux/initial-tab-whitelist` /dev/null \
-	      | $(EGREP) -v ':[ 	]*/?\*'; \
-	then \
-	  echo "See above for files that use tabs for indentation."; \
-	  echo "Please use spaces instead."; \
-	  exit 1; \
-	fi
-.PHONY: check-tabs
-
-ALL_LOCAL += thread-safety-check
-thread-safety-check:
-	@cd $(srcdir); \
-	if test -e .git && (git --version) >/dev/null 2>&1 && \
-	  grep -n -f build-aux/thread-safety-blacklist \
-	    `git ls-files | grep '\.[ch]$$' \
-	      | $(EGREP) -v '^datapath|^lib/sflow|^third-party'` /dev/null \
-	      | $(EGREP) -v ':[ 	]*/?\*'; \
-	then \
-	  echo "See above for list of calls to functions that are"; \
-	  echo "blacklisted due to thread safety issues"; \
-	  exit 1; \
-	fi
-EXTRA_DIST += build-aux/thread-safety-blacklist
-.PHONY: thread-safety-check
 
 # Check that "ip" is used in preference to "ifconfig", because
 # "ifconfig" is not installed ubiquitously anymore.
