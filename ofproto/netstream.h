@@ -65,9 +65,8 @@ struct netstream_db_record{
     char protocol[NS_MAX_STRING_READABLE];
     uint64_t bytes_per_pkt;
     uint8_t ip_tos;
-    uint8_t sample_mode;
     uint16_t sample_interval;
-    uint8_t pad[4];
+    uint8_t pad[3];
 };
 
 struct netstream_db_queue{

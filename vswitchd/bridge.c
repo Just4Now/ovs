@@ -1253,6 +1253,7 @@ bridge_configure_netstream(struct bridge *br)
     if (ofproto_set_netstream(br->name, br->ofproto, &opts)) {
         VLOG_ERR("bridge %s: problem setting netstream collectors", br->name);
     }
+    VLOG_INFO("bridge %s:setting netstream ok", br->name);
     sset_destroy(&opts.collectors);
 }
 
