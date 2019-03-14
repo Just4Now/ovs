@@ -24,7 +24,7 @@
 VLOG_DEFINE_THIS_MODULE(netstream);
 
 static void netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex);
-static void netstream_expire__(struct netstream *, struct netstream_flow *, enum EXPIRED_TYPE)
+static void netstream_expire__(struct netstream *, struct netstream_flow *)
     OVS_REQUIRES(mutex);
 static void gen_netstream_rec(struct netstream *, struct netstream_flow *)
     OVS_REQUIRES(mutex);
@@ -85,7 +85,6 @@ netstream_set_options(struct netstream *ns,
 {
     int error = 0;
     long long int old_timeout;
-    bool old_log;
 
     ovs_mutex_lock(&mutex);
     ns->engine_type = ns_options->engine_type;
@@ -95,10 +94,8 @@ netstream_set_options(struct netstream *ns,
     ns->sample_interval = ns_options->sample_interval;
     ns->flow_cache_number = ns_options->flow_cache_number;
     ns->tcp_flag = ns_options->tcp_flag;
-    
-    old_log = ns->log;
+
     ns->log = ns_options->log;
-    
     /* 日志功能开关发生了变化 */
     if (ns->log) {
         /* 创建目录及环形队列以及数据库(不存在的情况下) */
@@ -109,7 +106,17 @@ netstream_set_options(struct netstream *ns,
     {
         netstream_db_destroyque(&ns->ns_db_que);
     }
-    
+
+    ns->forced_expiring = ns_options->forced_expired;
+    /* 强制老化并删除流 */
+    if (ns->forced_expiring) {
+        struct netstream_flow *ns_flow, *next;
+        HMAP_FOR_EACH_SAFE (ns_flow, next, hmap_node, &ns->flows) {
+            netstream_expire__(ns, ns_flow);
+            hmap_remove(&ns->flows, &ns_flow->hmap_node);
+            free(ns_flow);
+        }
+    }
 
     collectors_destroy(ns->collectors);
     collectors_create(&ns_options->collectors, -1, &ns->collectors);
@@ -170,6 +177,7 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         ns->packet.size = 0;
     }
 
+    /* 距离上一次进入该函数还未超过1秒则直接返回 */
     if (now < ns->next_timeout) {
         return;
     }
@@ -179,7 +187,7 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
     HMAP_FOR_EACH_SAFE (ns_flow, next, hmap_node, &ns->flows) {
         /* 非活跃流老化 */
         if (now > ns_flow->used + ns->inactive_timeout) {
-            netstream_expire__(ns, ns_flow, INACTIVE_FLOW);
+            netstream_expire__(ns, ns_flow);
             /* 将超时的非活跃流移除 */
             hmap_remove(&ns->flows, &ns_flow->hmap_node);
             free(ns_flow);
@@ -187,7 +195,8 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         }
         /* 活跃流老化 */
         if (now > ns_flow->last_expired + ns->active_timeout) {
-            netstream_expire__(ns, ns_flow, ACTIVE_FLOW);
+            ns_flow->last_expired += ns->active_timeout;    //更新上一次活跃流超时的时间
+            netstream_expire__(ns, ns_flow);
         }
     }
 
@@ -241,16 +250,12 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
 }
 
 static void
-netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow, enum EXPIRED_TYPE expired_type)
+netstream_expire__(struct netstream *ns, struct netstream_flow *ns_flow)
     OVS_REQUIRES(mutex)
 {
     uint64_t pkts;
 
     pkts = ns_flow->packet_count;
-
-    if (expired_type == ACTIVE_FLOW) {
-        ns_flow->last_expired += ns->active_timeout;    //更新上一次超时的时间
-    }
 
     if (pkts == 0) {
         return;
@@ -721,14 +726,14 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     连接的FIN和RST报文触发老化的老化方式。 */
     if (ns_flow->nw_proto == NS_TCP && ns_flow->packet_count > 1 &&
         (stats->tcp_flags & (TCP_FIN | TCP_RST))) {
-        netstream_expire__(ns, ns_flow, TCP_FLAGS);
+        netstream_expire__(ns, ns_flow);
         hmap_remove(&ns->flows, &ns_flow->hmap_node);
         free(ns_flow);
         goto end;
     }
 
     if (ns_flow->output_iface != output_iface) {
-        netstream_expire__(ns, ns_flow, OUTPUT_CH);
+        netstream_expire__(ns, ns_flow);
         ns_flow->created = stats->used;
         ns_flow->output_iface = output_iface;
     }
@@ -736,7 +741,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     /* 字节数翻转了直接进行老化 */
     n_bytes = ns_flow->byte_count + stats->n_bytes;
     if (n_bytes < ns_flow->byte_count && n_bytes < stats->n_bytes) {
-        netstream_expire__(ns, ns_flow, BYTES_WRAPPED);
+        netstream_expire__(ns, ns_flow);
     }
 
     ns_flow->packet_count += stats->n_packets;

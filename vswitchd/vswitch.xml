@@ -5412,31 +5412,19 @@ ovs-vsctl add-port br0 p0 -- set Interface p0 type=patch options:peer=p1 \
     NetStream description.
 
     <column name="targets">
-      NetStream targets in the form
-      <code><var>ip</var>:<var>port</var></code>.  The <var>ip</var>
-      must be specified numerically, not as a DNS name.
+      targets
     </column>
 
     <column name="engine_id">
-      Engine ID to use in NetStream messages.  Defaults to datapath index
-      if not specified.
+      engine_id
     </column>
 
     <column name="engine_type">
-      Engine type to use in NetStream messages.  Defaults to datapath
-      index if not specified.
+      engine_type
     </column>
 
     <column name="add_id_to_interface">
-      <p>If this column's value is <code>false</code>, the ingress and egress
-      interface fields of NetFlow flow records are derived from OpenFlow port
-      numbers.  When it is <code>true</code>, the 7 most significant bits of
-      these fields will be replaced by the least significant 7 bits of the
-      engine id.  This is useful because many NetFlow collectors do not
-      expect multiple switches to be sending messages from the same host, so
-      they do not store the engine information which could be used to
-      disambiguate the traffic.</p>
-      <p>When this option is enabled, a maximum of 508 ports are supported.</p>
+      add_id_to_interface
     </column>
 
     <column name="sample_interval">
@@ -5459,9 +5447,12 @@ ovs-vsctl add-port br0 p0 -- set Interface p0 type=patch options:peer=p1 \
       log
     </column>
 
-
     <column name="tcp_flag">
       tcp_terminate
+    </column>
+
+    <column name="forced_expiring">
+      forced_expiring
     </column>
 
     <group title="Common Columns">

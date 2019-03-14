@@ -1,6 +1,6 @@
 {"name": "Open_vSwitch",
  "version": "7.16.1",
- "cksum": "3793536004 25548",
+ "cksum": "2605702133 25605",
  "tables": {
    "Open_vSwitch": {
      "columns": {
@@ -516,6 +516,8 @@
        "log": {
          "type": "boolean"},
        "tcp_flag": {
+         "type": "boolean"},
+       "forced_expiring": {
          "type": "boolean"},
        "external_ids": {
          "type": {"key": "string", "value": "string",

@@ -34,15 +34,6 @@ enum SAMPLE_MODE {
     RANDOM_PACKETS
 };
 
-enum EXPIRED_TYPE {
-    INACTIVE_FLOW,
-    ACTIVE_FLOW,
-    TCP_FLAGS,
-    OUTPUT_CH,
-    BYTES_WRAPPED,
-    FORCE_EXPIRED
-};
-
 struct netstream_db_record{
     uint32_t src_ip;
     uint32_t dst_ip;
@@ -88,6 +79,7 @@ struct netstream_options {
     int flow_cache_number;
     bool log;
     bool tcp_flag;
+    bool forced_expired;
 };
 
 struct netstream {
@@ -100,6 +92,7 @@ struct netstream {
                                    * 'engine_id' into the most significant
                                    * bits of the interface fields. */
     bool tcp_flag;
+    bool forced_expiring;
 
     enum SAMPLE_MODE sample_mode;
     uint32_t sample_interval;
