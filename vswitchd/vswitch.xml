@@ -5439,10 +5439,6 @@ ovs-vsctl add-port br0 p0 -- set Interface p0 type=patch options:peer=p1 \
       <p>When this option is enabled, a maximum of 508 ports are supported.</p>
     </column>
 
-    <column name="sample_mode">
-      sample_mode
-    </column>
-
     <column name="sample_interval">
       sample_interval
     </column>

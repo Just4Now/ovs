@@ -1199,26 +1199,12 @@ bridge_configure_netstream(struct bridge *br)
     }
 
     /* Confugure sample mode and value */
-    if (cfg->sample_mode) {
-        if (strcmp(cfg->sample_mode, "random_packets")) {
-            opts.sample_mode = RANDOM_PACKETS;
-        }else if(strcmp(cfg->sample_mode, "fix_packets")) {
-            opts.sample_mode = FIX_PACKETS;
-        }
-        else {
-            VLOG_WARN("bridge %s: sample mode set to unkonwn mode, "
-                      "using default mode instead.(random-packets)", br->name);
-            opts.sample_mode = NS_SAMPLE_MODE_DEFAULT;
-        }
-    }else
-    {
-        opts.sample_mode = NS_SAMPLE_MODE_DEFAULT;
-    }
+    opts.sample_mode = NS_SAMPLE_MODE_DEFAULT;
     /* sample_interval */
     opts.sample_interval = NS_SAMPLE_INTERVAL_DEFAULT;
     if (cfg->sample_interval) {
         opts.sample_interval = *cfg->sample_interval;
-    }      
+    }    
 
     /* Confugure inactive timeout interval */
     opts.inactive_timeout = NS_INACTIVE_TIMEOUT_DEFAULT;

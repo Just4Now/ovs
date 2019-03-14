@@ -160,7 +160,7 @@ nsquery_usage()
            "    # ovs-nsquery --protocol=6 --verbose\n");     
     printf("\nOther options:\n"
            "  --help                  display this help message\n"
-           "  --verbose               display the streams in more details");
+           "  --verbose               display the streams in more details\n");
 }
 
 static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
@@ -172,6 +172,13 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
     int longindex = NS_MAX_QUERY_CONDITION + 2;
 
     do{
+        if (argc == 1) {
+            q_c->verbose = false;
+            q_c->is_specified = false;
+            q_c->cond_br_only = false;
+            return;
+        }
+
         c = getopt_long (argc, argv, short_options, long_options, &longindex);
 
         if (longindex > NS_MAX_QUERY_CONDITION) {
@@ -307,7 +314,6 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
                 break;
         }
     } while(true); 
-
 
     if (!ns_check_time(q_c)) {
         printf("The start time must be earlier than the end time.\n");
