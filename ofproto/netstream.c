@@ -42,7 +42,7 @@ static uint32_t netstream_flow_hash(const struct flow *);
 
 static struct ovs_mutex mutex = OVS_MUTEX_INITIALIZER;
 static atomic_count netstream_count = ATOMIC_COUNT_INIT(0);
-static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
+static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 5);
 
 const char *sql_index_name[] = {
     "SRC_IP_INDEX", "SRC_IP",
@@ -205,18 +205,18 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         sprintf(db_file_path, "%s/%s-%s", ns->log_path, ns->bridge_name, NS_DB_FILE_NAME);
         rc = sqlite3_open(db_file_path, &db);
         if (rc != SQLITE_OK) {
-            printf("Can't open netstream log database(%s), please check "
+            VLOG_ERR_RL(&rl, "Can't open netstream log database(%s), please check "
                    "if it is bad.(Error message:%s)", db_file_path, sqlite3_errmsg(db));
             goto err_open;
         }else{
             rc = sqlite3_exec(db, "PRRAGMA synchronous = OFF", 0, 0, &errmsg);  //关闭同步
             if (rc != SQLITE_OK) {  //关闭同步失败
-                printf("Turn off synchronous failed.(Error message:%s)", errmsg);
+                VLOG_ERR_RL(&rl, "Turn off synchronous failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
             rc = sqlite3_exec(db, "BEGIN", 0, 0, &errmsg); //开启事务
             if (rc != SQLITE_OK) {  //开启事务失败
-                printf("Excuting begin failed.(Error message:%s)", errmsg);
+                VLOG_ERR_RL(&rl, "Excuting begin failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }
@@ -225,14 +225,14 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
         {
             rc = sqlite3_exec(db, "COMMIT", 0, 0, &errmsg); //提交事务
             if (rc != SQLITE_OK) {  //提交事务失败
-                printf("Excuting commit failed.(Error message:%s)", errmsg);
+                VLOG_ERR_RL(&rl, "Excuting commit failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }else
         {
             rc = sqlite3_exec(db, "ROLLBACK", 0, 0, &errmsg); //提交事务
             if (rc != SQLITE_OK) {  //提交事务失败
-                printf("Excuting rollback failed.(Error message:%s)", errmsg);
+                VLOG_ERR_RL(&rl, "Excuting rollback failed.(Error message:%s)", errmsg);
                 goto err_excute;
             }
         }
@@ -423,7 +423,7 @@ netstream_create_database(struct netstream *ns)
     
     rc = sqlite3_open(db_file_path, &db);
     if (rc != SQLITE_OK) {
-        printf("Can't open netstream log database(%s), please " 
+        VLOG_ERR_RL(&rl, "Can't open netstream log database(%s), please " 
                  "check if it is bad.(Error message:%s)", db_file_path, sqlite3_errmsg(db));
         goto err_open;
     }
@@ -454,7 +454,7 @@ netstream_create_database(struct netstream *ns)
             "BYTES_PER_PKT INTEGER);");
     rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
     if( rc != SQLITE_OK ){
-        printf("Can't create main table netstream in %s."
+        VLOG_ERR_RL(&rl, "Can't create main table netstream in %s."
                  "(Error message:%s)", db_file_path, errmsg);
         goto err_create;
     }
@@ -468,7 +468,7 @@ netstream_create_database(struct netstream *ns)
                 "COUNT INTEGER);", sql_index_name[i + 1]);
         rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
         if( rc != SQLITE_OK ){
-            printf("%s:Can't create subtable (%s).(Error message:%s)", \
+            VLOG_ERR_RL(&rl, "%s:Can't create subtable (%s).(Error message:%s)", \
                      sql_index_name[i], db_file_path, errmsg);
             goto err_create;
         }
@@ -481,7 +481,7 @@ netstream_create_database(struct netstream *ns)
                 sql_index_name[i], sql_index_name[i + 1]);
         rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
         if( rc != SQLITE_OK ){
-            printf("Can't create index(%s) on netstream (%s).(Error message:%s)", \
+            VLOG_ERR_RL(&rl, "Can't create index(%s) on netstream (%s).(Error message:%s)", \
                    sql_index_name[i], db_file_path, errmsg);
             goto err_create;
         }
@@ -668,7 +668,7 @@ netstream_log_path_init(struct netstream *ns)
     {  
         if(mkdir(ns_log_dir, NS_LOG_DIR_MODE) != 0)  
         {
-            printf("Can't create netstream log path(%s)", ns_log_dir);
+            VLOG_ERR_RL(&rl, "Can't create netstream log path(%s)", ns_log_dir);
             ns->log = false;
             return;   
         } 
@@ -697,7 +697,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     if (!ns_flow) {
         
         if (hmap_count(&ns->flows) >= ns->flow_cache_number) {
-            printf("The maximum number of streams has been reached\n");
+            VLOG_ERR_RL(&rl, "The maximum number of streams has been reached\n");
             goto end;
         } 
 

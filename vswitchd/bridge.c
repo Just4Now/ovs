@@ -1239,7 +1239,7 @@ bridge_configure_netstream(struct bridge *br)
         }
     }
 
-    /* Save to local and path*/
+    /* netstream log*/
     opts.log = cfg->log;
 
     /* TCP Flags */
