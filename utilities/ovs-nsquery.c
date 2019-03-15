@@ -404,8 +404,8 @@ ns_query_database(struct query_conditions *q_c)
     memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
 
 
-    //sprintf(ns_log_dir_path, "%s/NetStream", "/usr/local/share/openvswitch");
-    sprintf(ns_log_dir_path, "%s/NetStream", ovs_pkgdatadir());  /* /usr/local/share/openvswitch */
+    //sprintf(ns_log_dir_path, "%s/netstream", "/usr/local/share/openvswitch");
+    sprintf(ns_log_dir_path, "%s/netstream", ovs_pkgdatadir());  /* /usr/local/share/openvswitch */
 
     if ((ns_dir = opendir(ns_log_dir_path)) == NULL)
     {
@@ -414,12 +414,12 @@ ns_query_database(struct query_conditions *q_c)
     }
 
     if (q_c->verbose) {
-        n_stable += sprintf(sqlcmd, "SELECT BR_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT,"
+        n_stable += sprintf(sqlcmd, "SELECT BRIDGE_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT,"
                 "S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT,"
                 "TOS,SAMPLE_INT,BYTES_PER_PKT,FLOW_TYPE FROM NETSTREAM ");
     }else
     {
-        n_stable += sprintf(sqlcmd, "SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,"
+        n_stable += sprintf(sqlcmd, "SELECT BRIDGE_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,"
                 "INPUT,OUTPUT,PACKET_COUNT FROM NETSTREAM ");
     }
 
@@ -608,14 +608,13 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
             {
                 /* "SELECT BR_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT," 0-4
                    "S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT," 5-10
-                   "TOS,SAMPLE_MODE,SAMPLE_INT,BYTES_PER_PKT,FLOW_TYPE FROM NETSTREAM; 11-15 */
+                   "TOS,SAMPLE_INT,BYTES_PER_PKT,FLOW_TYPE FROM NETSTREAM; 11-15 */
                 if (verbose) {
                     printf("-6s %-8s %-22s %-22s %-4s %-4s %-8s\n", result[i *  n_column], \
                            result[i *  n_column + 1], result[i *  n_column + 3], \
                            result[i *  n_column + 4], result[i *  n_column + 7], \
                            result[i *  n_column + 8], result[i *  n_column + 9]);
-                    printf("SampleMode: %-15s   SampleInterval: %-5s\n", 
-                           result[i *  n_column + 12], result[i *  n_column + 13]);
+                    printf("SampleInterval: %-5s\n", result[i *  n_column + 13]);
                     printf("Bytes: %-20s    Bytes/Pkts: %-16s Tos: %-16s\n",  \
                            result[i *  n_column + 10], result[i *  n_column + 14], \
                            result[i *  n_column + 11]);

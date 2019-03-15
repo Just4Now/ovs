@@ -1040,7 +1040,7 @@ classify_upcall(enum dpif_upcall_type type, const struct nlattr *userdata,
     memcpy(cookie, nl_attr_get(userdata), sizeof *cookie);
     if (cookie->type == USER_ACTION_COOKIE_SFLOW) {
         return SFLOW_UPCALL;
-    } else if (cookie->type == USER_ACTION_COOKIE_SLOW_PATH) {
+    } else if (cookie->type == USER_ACTION_COOKIE_NETSTREAM) {
         return NETSTREAM_UPCALL;
     } else if (cookie->type == USER_ACTION_COOKIE_SLOW_PATH) {
         return SLOW_PATH_UPCALL;

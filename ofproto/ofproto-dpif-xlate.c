@@ -3188,13 +3188,6 @@ compose_netstream_sample_action(struct xlate_ctx *ctx,
                       const odp_port_t tunnel_out_port,
                       bool include_actions)
 {
-    /* If the slow path meter is configured by the controller,
-     * insert a meter action before the user space action.  */
-    struct ofproto *ofproto = &ctx->xin->ofproto->up;
-    uint32_t meter_id = ofproto->slowpath_meter_id;
-
-    /* When meter action is not required, avoid generate sample action
-     * for 100% sampling rate.  */
     size_t sample_offset = 0, actions_offset = 0;
     sample_offset = nl_msg_start_nested(ctx->odp_actions,
                                         OVS_ACTION_ATTR_SAMPLE);
@@ -3245,6 +3238,7 @@ compose_sflow_action(struct xlate_ctx *ctx)
 static size_t
 compose_netstream_action(struct xlate_ctx *ctx)
 {
+    VLOG_INFO("enter compose_netstream_action");
     struct netstream *ns = ctx->xbridge->netstream;
     if (!ns || ctx->xin->flow.in_port.ofp_port == OFPP_NONE) {
         return 0;
@@ -3346,7 +3340,6 @@ fix_sflow_action(struct xlate_ctx *ctx, unsigned int user_cookie_offset)
 static void
 fix_netstream_action(struct xlate_ctx *ctx, unsigned int user_cookie_offset)
 {
-    const struct flow *base = &ctx->base_flow;
     struct user_action_cookie *cookie;
 
     cookie = ofpbuf_at(ctx->odp_actions, user_cookie_offset, sizeof *cookie);
