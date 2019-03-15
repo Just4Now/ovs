@@ -15,13 +15,13 @@
 #include "openvswitch/vlog.h"
 
 #define NS_MAX_QUERY_CONDITION 8
-#define NS_MAX_INDEX_LENGTH 8
+#define NS_MAX_INDEX_LENGTH 24
 #define NS_MAX_ARG_LENGTH 24
 #define NS_MAX_BRIDGE_NAME_LENGTH 16
 #define NS_MAX_PATH_LOG_LENGTH 64
 #define NS_MAX_QUERY_ROW 72
 #define NS_MAX_VALUE_LENGTH 32
-#define NS_MAX_SQL_CMD_LENGTH 512
+#define NS_MAX_SQL_CMD_LENGTH 1024
 #define NS_DISPLAY_MORE_LENGTH 24
 #define NS_DISPLAY_MORE_LENGTH_VERBOSE 6
 
@@ -47,7 +47,7 @@ struct query_conditions
 };
 
 const char *condition_name[NS_MAX_QUERY_CONDITION] = {
-    "BRI_NAME",
+    "BRIDGE_NAME",
     "SRC_IP",
     "DST_IP",
     "SRC_PORT",
@@ -86,7 +86,7 @@ static bool nsquery_check_ip(char *, struct in_addr *);
 static bool ns_str2uint16(char *, uint16_t *);
 static bool ns_str2uint8(char *, uint8_t *);
 static bool ns_str2timestamp(char *, uint64_t *);
-static bool ns_check_time(struct query_conditions *);
+static bool ns_check_time(struct query_conditions *q_c, uint64_t start_time, uint64_t end_time);
 static void ns_query_database(struct query_conditions *);
 static void parser_commands(int , char **, struct query_conditions *);
 static void ns_query_get_table(sqlite3 *, char *, bool);
@@ -154,7 +154,7 @@ nsquery_usage()
            "\n  Of course,it's ok to specify nothing and specify multiple conditions.There "
            "are some query examples below:\n"
            "    # ovs-nsquery\n"
-           "    # ovs-nsquery --br-name=s1\n"
+           "    # ovs-nsquery --br-name=\"s1\"\n"
            "    # ovs-nsquery --src-ip=10.0.0.1 --dst-ip=20.0.0.1 --src-port=12 --dst-port=63\n"
            "    # ovs-nsquery --start-time=\"2018-01-01 00:00:00\" --end-time=\"2018-01-01 24:00:00\"\n"
            "    # ovs-nsquery --protocol=6 --verbose\n");     
@@ -168,7 +168,8 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
     char c;
     uint16_t port;
     uint8_t protocol;
-    uint64_t timestamp;
+    uint64_t start_time;
+    uint64_t end_time;
     int longindex = NS_MAX_QUERY_CONDITION + 2;
 
     do{
@@ -181,7 +182,7 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
 
         c = getopt_long (argc, argv, short_options, long_options, &longindex);
 
-        if (longindex > NS_MAX_QUERY_CONDITION) {
+        if (longindex > NS_MAX_QUERY_CONDITION + 1) {
             printf("unknown command; use --help for help\n");
             exit(EXIT_FAILURE);
         }
@@ -273,7 +274,7 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
                     if (protocol >=0 && protocol <= 255) {
                         q_c->q_s_cond[PROTOCOL].is_specified = true;
                         q_c->cond_br_only = false;
-                        sprintf(q_c->q_s_cond[SRC_PORT].value, "%u", protocol);
+                        sprintf(q_c->q_s_cond[PROTOCOL].value, "%u", protocol);
                     }else
                     {
                         printf("The protocol number(%u) is out of range.(0 to 255 is valid)\n", protocol);
@@ -286,11 +287,11 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
                 }
                 break;
             case START_TIME:
-                if(ns_str2timestamp(optarg, &timestamp))
+                if(ns_str2timestamp(optarg, &start_time))
                 {
                     q_c->q_s_cond[START_TIME].is_specified = true;
                     q_c->cond_br_only = false;
-                    sprintf(q_c->q_s_cond[START_TIME].value, "%u", timestamp);
+                    sprintf(q_c->q_s_cond[START_TIME].value, "%u", start_time);
                 }else
                 {
                     printf("Invalid start time(%s).\n", optarg);
@@ -298,11 +299,11 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
                 }
                 break;
             case END_TIME:
-                if(ns_str2timestamp(optarg, &timestamp))
+                if(ns_str2timestamp(optarg, &end_time))
                 {
                     q_c->q_s_cond[END_TIME].is_specified = true;
                     q_c->cond_br_only = false;
-                    sprintf(q_c->q_s_cond[END_TIME].value, "%u", timestamp);
+                    sprintf(q_c->q_s_cond[END_TIME].value, "%u", end_time);
                 }else
                 {
                     printf("Invalid end time(%s).\n", optarg);
@@ -315,7 +316,7 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
         }
     } while(true); 
 
-    if (!ns_check_time(q_c)) {
+    if (!ns_check_time(q_c, start_time, end_time)) {
         printf("The start time must be earlier than the end time.\n");
         exit(EXIT_FAILURE);
     }
@@ -368,19 +369,18 @@ ns_str2timestamp(char *str_timestamp, uint64_t *timestamp)
 {
     struct tm tm_tmp;
     memset(&tm_tmp, 0, sizeof tm_tmp);
-    if(sscanf(optarg, "%d-%d-%d %d:%d:%d", &tm_tmp.tm_year, &tm_tmp.tm_mon, \
+    if(sscanf(str_timestamp, "%d-%d-%d %d:%d:%d", &tm_tmp.tm_year, &tm_tmp.tm_mon, \
               &tm_tmp.tm_mday, &tm_tmp.tm_hour, &tm_tmp.tm_min, &tm_tmp.tm_sec) == 6){
         *timestamp = (uint64_t)mktime(&tm_tmp);
-        return true;
-    }
+        return true;}
     return false;
 }
 
 static bool
-ns_check_time(struct query_conditions *q_c)
+ns_check_time(struct query_conditions *q_c, uint64_t start_time, uint64_t end_time)
 {
     if (q_c->q_s_cond[START_TIME].is_specified && q_c->q_s_cond[END_TIME].is_specified) {
-        if (q_c->q_s_cond[START_TIME].value > q_c->q_s_cond[END_TIME].value) {
+        if (start_time > end_time) {
             return false;
         }
         return true;
@@ -517,15 +517,14 @@ ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_i
             n += sprintf(sqlcmd, "SELECT SUM(COUNT) FROM %s WHERE VALUE", condition_name[i]);
             /* 找包含于输入起始、终止时间之间的流 */
             if (i == START_TIME) {
-                strcat(sqlcmd, " >= ");
+                n += sprintf(sqlcmd + n, ">= %s;", q_c->q_s_cond[i].value);
             }else if (i == END_TIME)
             {
-                strcat(sqlcmd, " <= ");
+                n += sprintf(sqlcmd + n, "<= %s;", q_c->q_s_cond[i].value);
             }else
             {
-                strcat(sqlcmd, " = ");
+                n += sprintf(sqlcmd + n, "= %s;", q_c->q_s_cond[i].value);
             }
-            n += sprintf(sqlcmd, "%s;", q_c->q_s_cond[i].value);
 
             rc = sqlite3_get_table(db, sqlcmd, &result, &n_row, &n_column, &err_msg);
             if (rc != SQLITE_OK) {
@@ -535,8 +534,9 @@ ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_i
                 return false;
             }else
             {
-                if (n_row == 0) {
+                if (n_row == 1) {   //reslut[0] = "SUM(COUNT)"
                     best_i = i;
+                    sqlite3_free_table(result);
                     break;
                 }
                 
@@ -548,6 +548,7 @@ ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_i
                 }
                 
             }
+            sqlite3_free_table(result);
         }
     }
     strcpy(best_index, index_name[best_i]);
