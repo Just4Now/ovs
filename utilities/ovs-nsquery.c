@@ -46,7 +46,7 @@ struct query_conditions
     struct query_single_cond q_s_cond[NS_MAX_QUERY_CONDITION];
 };
 
-const char *condition_name = {
+const char *condition_name[NS_MAX_QUERY_CONDITION] = {
     "BRI_NAME",
     "SRC_IP",
     "DST_IP",
@@ -57,7 +57,7 @@ const char *condition_name = {
     "END_TIME"
 };
 
-const char *index_name = {
+const char *index_name[NS_MAX_QUERY_CONDITION] = {
     "",
     "SRC_IP_INDEX",
     "DST_IP_INDEX",
@@ -514,7 +514,7 @@ ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_i
         if (q_c->q_s_cond[i].is_specified) {
             int n = 0;
             memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
-            n += sprintf(sqlcmd, "SELECT COUNT FROM %s WHERE VALUE", condition_name[i]);
+            n += sprintf(sqlcmd, "SELECT SUM(COUNT) FROM %s WHERE VALUE", condition_name[i]);
             /* 找包含于输入起始、终止时间之间的流 */
             if (i == START_TIME) {
                 strcat(sqlcmd, " >= ");

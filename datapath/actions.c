@@ -1059,11 +1059,11 @@ static int sample(struct datapath *dp, struct sk_buff *skb,
 	if ((arg->probability != U32_MAX) &&
 	    (!arg->probability || prandom_u32() > arg->probability)) {
 		if (last)
-			consume_skb(skb);
+			consume_skb(skb);	/* 如果不需要采样且时最后一个act则直接consume掉 */
 		return 0;
 	}
 
-	clone_flow_key = !arg->exec;
+	clone_flow_key = !arg->exec;	//arg->exec为true则采样中的行为不会改变key
 	return clone_execute(dp, skb, key, 0, actions, rem, last,
 			     clone_flow_key);
 }
@@ -1405,6 +1405,7 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 	struct deferred_action *da;
 	struct sw_flow_key *clone;
 
+	/* 如果采样行为不是最后一个行为则需要copy skb */
 	skb = last ? skb : skb_clone(skb, GFP_ATOMIC);
 	if (!skb) {
 		/* Out of memory, skip this action.
@@ -1424,7 +1425,7 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 
 		if (actions) { /* Sample action */
 			if (clone_flow_key)
-				__this_cpu_inc(exec_actions_level);
+				__this_cpu_inc(exec_actions_level);		/* exec_actions_level++ */
 
 			err = do_execute_actions(dp, skb, clone,
 						 actions, len);
