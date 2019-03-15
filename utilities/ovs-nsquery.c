@@ -18,7 +18,7 @@
 #define NS_MAX_INDEX_LENGTH 8
 #define NS_MAX_ARG_LENGTH 24
 #define NS_MAX_BRIDGE_NAME_LENGTH 16
-#define NS_MAX_PATH_LOG_LENGTH 48
+#define NS_MAX_PATH_LOG_LENGTH 64
 #define NS_MAX_QUERY_ROW 72
 #define NS_MAX_VALUE_LENGTH 32
 #define NS_MAX_SQL_CMD_LENGTH 512
@@ -50,8 +50,8 @@ const char *condition_name = {
     "BRI_NAME",
     "SRC_IP",
     "DST_IP",
-    "SRC_IP",
-    "DST_IP",
+    "SRC_PORT",
+    "DST_PORT",
     "PROTOCOL",
     "START_TIME",
     "END_TIME"
@@ -61,8 +61,8 @@ const char *index_name = {
     "",
     "SRC_IP_INDEX",
     "DST_IP_INDEX",
-    "SRC_IP_INDEX",
-    "DST_IP_INDEX",
+    "SRC_PORT_INDEX",
+    "DST_PORT_INDEX",
     "PROTOCOL_INDEX",
     "START_TIME_INDEX",
     "END_TIME_INDEX"
@@ -416,7 +416,7 @@ ns_query_database(struct query_conditions *q_c)
     if (q_c->verbose) {
         n_stable += sprintf(sqlcmd, "SELECT BRIDGE_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT,"
                 "S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT,"
-                "TOS,SAMPLE_INT,BYTES_PER_PKT,FLOW_TYPE FROM NETSTREAM ");
+                "TOS,SAMPLE_INT,BYTES_PER_PKT FROM NETSTREAM ");
     }else
     {
         n_stable += sprintf(sqlcmd, "SELECT BRIDGE_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,"
@@ -448,7 +448,7 @@ ns_query_database(struct query_conditions *q_c)
                 if (q_c->is_specified) {
                     /* 如果查询条件只有bridge name将不会查找最佳索引，因为没有为BRI_NAME设置索引 */
                     if (!q_c->cond_br_only) {
-                        char best_index[NS_MAX_INDEX_LENGTH];
+                        char best_index[NS_MAX_INDEX_LENGTH] = {0};
                         if(ns_query_find_best_index(db, q_c, best_index))
                         {
                             n += sprintf(sqlcmd + n, "INDEXED BY %s ", best_index);
@@ -514,7 +514,7 @@ ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_i
         if (q_c->q_s_cond[i].is_specified) {
             int n = 0;
             memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
-            n += sprintf(sqlcmd, "SELECT COUNT FROM %s WHERE VALUE ", condition_name[i]);
+            n += sprintf(sqlcmd, "SELECT COUNT FROM %s WHERE VALUE", condition_name[i]);
             /* 找包含于输入起始、终止时间之间的流 */
             if (i == START_TIME) {
                 strcat(sqlcmd, " >= ");
@@ -591,10 +591,11 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
     {
         memset(sqlcmd_tmp, 0, NS_MAX_SQL_CMD_LENGTH);
         /* 加入limit offset限制 */
-        sprintf("%s LIMIT %d OFFSET %d;", NS_MAX_SQL_CMD_LENGTH, query_offset);
+        sprintf(sqlcmd_tmp, " LIMIT %d OFFSET %d;", NS_MAX_QUERY_ROW, query_offset);
+        strcat(sqlcmd, sqlcmd_tmp);
         rc = sqlite3_get_table(db, sqlcmd, &result, &n_row, &n_column, &err_msg);
         if (rc != SQLITE_OK) {
-            printf("Find best index error(Error message:%s)." ,err_msg);
+            printf("Get table error(Error message:%s)." ,err_msg);
             sqlite3_free(err_msg);
             free(sqlcmd_tmp);
             return;
@@ -606,9 +607,9 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
             int actual_records = MAX(left_n_column, max_display_records);
             for(int i = 1; i < actual_records; i++)
             {
-                /* "SELECT BR_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT," 0-4
-                   "S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT," 5-10
-                   "TOS,SAMPLE_INT,BYTES_PER_PKT,FLOW_TYPE FROM NETSTREAM; 11-15 */
+                /* SELECT BRIDGE_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT,
+                   S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT,
+                   TOS,SAMPLE_INT,BYTES_PER_PKT FROM NETSTREAM */
                 if (verbose) {
                     printf("-6s %-8s %-22s %-22s %-4s %-4s %-8s\n", result[i *  n_column], \
                            result[i *  n_column + 1], result[i *  n_column + 3], \

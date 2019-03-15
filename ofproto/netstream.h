@@ -7,7 +7,7 @@
 #include "ofproto.h"
 
 #define NS_MAX_BRIDGE_NAME_LENGTH 16
-#define NS_MAX_PATH_LOG_LENGTH 48
+#define NS_MAX_PATH_LOG_LENGTH 64
 #define NS_LOG_DIR_MODE 0755
 #define NS_MAX_DB_PATH_LENGTH 64
 #define NS_MAX_STRING_READABLE 32
