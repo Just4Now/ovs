@@ -414,12 +414,12 @@ ns_query_database(struct query_conditions *q_c)
     }
 
     if (q_c->verbose) {
-        n_stable += sprintf(sqlcmd, "SELECT BRIDGE_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT,"
+        n_stable += sprintf(sqlcmd, "SELECT BRIDGE_NAME,PRO_READ,DURATION,SRC_IP_PORT,DST_IP_PORT,"
                 "S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT,"
                 "TOS,SAMPLE_INT,BYTES_PER_PKT FROM NETSTREAM ");
     }else
     {
-        n_stable += sprintf(sqlcmd, "SELECT BRIDGE_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,"
+        n_stable += sprintf(sqlcmd, "SELECT BRIDGE_NAME,PRO_READ,SRC_IP_PORT,DST_IP_PORT,"
                 "INPUT,OUTPUT,PACKET_COUNT FROM NETSTREAM ");
     }
 

@@ -51,13 +51,14 @@ struct netstream_db_record{
     char dst_ip_port[NS_MAX_STRING_READABLE];
     char s_time_read[NS_MAX_STRING_READABLE];
     char e_time_read[NS_MAX_STRING_READABLE];
-    
+    char pro_read[NS_MAX_STRING_READABLE];  
     uint32_t duration;
-    char protocol[NS_MAX_STRING_READABLE];
+
     uint64_t bytes_per_pkt;
+    uint8_t protocol;
     uint8_t ip_tos;
     uint16_t sample_interval;
-    uint8_t pad[3];
+    uint8_t pad[4];
 };
 
 struct netstream_db_queue{
