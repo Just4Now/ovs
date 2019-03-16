@@ -42,8 +42,8 @@ struct netstream_db_record{
     uint16_t input;
     uint16_t output;
 
-    uint64_t start_time;
-    uint64_t end_time;
+    time_t start_time;
+    time_t end_time;
     uint32_t packet_count;
     uint32_t byte_count;
 
@@ -79,7 +79,7 @@ struct netstream_options {
     int flow_cache_number;
     bool log;
     bool tcp_flag;
-    bool forced_expired;
+    bool forced_expiring;
 };
 
 struct netstream {
@@ -136,6 +136,8 @@ struct netstream_flow {
     uint32_t packet_count;        /* Packets from subrules. */
     uint32_t byte_count;          /* Bytes from subrules. */
     uint64_t used;           /* Last-used time (0 if never used). */
+    time_t first_timestamp;
+    time_t last_timestamp;
 };
 
 /* Every NetStream v5 message contains the header that follows.  This is
@@ -167,8 +169,8 @@ struct netstream_v5_record {
     uint16_t output;               /* Output interface index. */
     uint32_t packet_count;         /* Number of packets. */
     uint32_t byte_count;           /* Number of bytes. */
-    uint32_t init_time;            /* Value of sysuptime on first packet. */
-    uint32_t used_time;            /* Value of sysuptime on last packet. */
+    uint32_t init_time;            /* Value of sysuptime on first packet.第一个包到NS开启之间的时间 */
+    uint32_t used_time;            /* Value of sysuptime on last packet.最后一个包到NS开启之间的时间 */
 
     /* The 'src_port' and 'dst_port' identify the source and destination
      * port, respectively, for TCP and UDP.  For ICMP, the high-order

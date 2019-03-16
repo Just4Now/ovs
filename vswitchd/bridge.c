@@ -1244,7 +1244,10 @@ bridge_configure_netstream(struct bridge *br)
 
     /* TCP Flags */
     opts.tcp_flag = cfg->tcp_flag;
-    
+
+    /* Forced expiring */
+    opts.forced_expiring = cfg->forced_expiring;
+
     /* Collectors. */
     sset_init(&opts.collectors);
     sset_add_array(&opts.collectors, cfg->targets, cfg->n_targets);

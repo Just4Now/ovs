@@ -98,7 +98,7 @@ netstream_set_options(struct netstream *ns,
     ns->log = ns_options->log;
     /* 日志功能开关发生了变化 */
     if (ns->log) {
-        /* 创建目录及环形队列以及数据库(不存在的情况下) */
+        /* 创建目录、环形队列以及数据库(不存在的情况下) */
         netstream_log_path_init(ns);
         netstream_db_createque(&ns->ns_db_que, ns->flow_cache_number);
         netstream_create_database(ns);
@@ -107,7 +107,7 @@ netstream_set_options(struct netstream *ns,
         netstream_db_destroyque(&ns->ns_db_que);
     }
 
-    ns->forced_expiring = ns_options->forced_expired;
+    ns->forced_expiring = ns_options->forced_expiring;
     /* 强制老化并删除流 */
     if (ns->forced_expiring) {
         struct netstream_flow *ns_flow, *next;
@@ -333,7 +333,6 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
     if (ns->log) {
         struct netstream_db_record ns_db_record;
         struct tm s_tm, e_tm;
-        time_t s_time, e_time;
 
         memset(&ns_db_record, 0, sizeof(ns_db_record));
         memset(&s_tm, 0, sizeof(s_tm));
@@ -345,8 +344,8 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
         ns_db_record.dst_port = ns_rec->dst_port;
         ns_db_record.input = ns_rec->input;
         ns_db_record.output = ns_rec->output;
-        ns_db_record.start_time = ns_flow->created;
-        ns_db_record.end_time = ns_flow->used;
+        ns_db_record.start_time = ns_flow->first_timestamp;
+        ns_db_record.end_time = ns_flow->last_timestamp;
         ns_db_record.packet_count = ns_rec->packet_count;
         ns_db_record.byte_count = ns_rec->byte_count;
         ns_db_record.duration = ns_db_record.end_time - ns_db_record.start_time;
@@ -381,8 +380,8 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
             sprintf(ns_db_record.dst_ip_port, "%s", inet_ntoa(addr));
         }
 
-        localtime_r(&s_time, &s_tm);
-        localtime_r(&e_time, &e_tm);
+        localtime_r(&ns_flow->first_timestamp, &s_tm);
+        localtime_r(&ns_flow->last_timestamp, &e_tm);
         strftime(ns_db_record.s_time_read, NS_MAX_STRING_READABLE, "%F %T", &s_tm);
         strftime(ns_db_record.e_time_read, NS_MAX_STRING_READABLE, "%F %T", &e_tm);
 
@@ -501,7 +500,7 @@ netstream_create_database(struct netstream *ns)
 static inline void
 netstream_db_createque(struct netstream_db_queue *ns_db_q, int maxlength)
 {
-    if (ns_db_q) {
+    if (ns_db_q && ns_db_q->ns_db_node) {
         return;
     }
     ns_db_q->ns_db_node = (struct netstream_db_record *)malloc(sizeof(struct netstream_db_record) * maxlength);
@@ -686,8 +685,7 @@ netstream_log_path_init(struct netstream *ns)
 
 void
 netstream_flow_update(struct netstream *ns, const struct flow *flow,
-                    ofp_port_t output_iface,
-                    const struct dpif_flow_stats *stats)
+                      ofp_port_t output_iface, const struct dpif_flow_stats *stats)
     OVS_EXCLUDED(mutex)
 {
     struct netstream_flow *ns_flow;
@@ -697,14 +695,14 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     /* NetStream only reports on IP packets. */
     if (flow->dl_type != htons(ETH_TYPE_IP)) {
         return;
-    }    
+    }
 
     ovs_mutex_lock(&mutex);
     ns_flow = netstream_flow_lookup(ns, flow);
     if (!ns_flow) {
         
         if (hmap_count(&ns->flows) >= ns->flow_cache_number) {
-            VLOG_ERR_RL(&rl, "The maximum number of streams has been reached\n");
+            VLOG_ERR_RL(&rl, "The maximum number of streams has been reached.\n");
             goto end;
         } 
 
@@ -718,8 +716,11 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
         ns_flow->tp_dst = flow->tp_dst;
         ns_flow->created = stats->used;
         ns_flow->output_iface = output_iface;
+        ns_flow->first_timestamp = ns_flow->last_timestamp = time_wall();
         hmap_insert(&ns->flows, &ns_flow->hmap_node, netstream_flow_hash(flow));
     }
+
+    ns_flow->last_timestamp = time_wall();
 
     /* 对于TCP连接，当有标志为FIN或RST的报文发送时，表示一次会话结束。当一条已经存在的NetStream流中流过
     一条标志为FIN或RST的报文时，可以立即老化相应的NetStream流，节省内存空间。因此建议在设备上开启由TCP
@@ -749,13 +750,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
 
     used = MAX(ns_flow->used, stats->used);
     if (ns_flow->used != used) {
-        ns_flow->used = used;
-        if (!ns->active_timeout || !ns_flow->last_expired
-            || ns->reconfig_active_timeout > ns_flow->last_expired) {
-            /* Keep the time updated to prevent a flood of expiration in
-             * the future. */
-            ns_flow->last_expired = time_msec();
-        }
+        ns_flow->used = used;   //更新流上次使用时间
     }
 
     end:
