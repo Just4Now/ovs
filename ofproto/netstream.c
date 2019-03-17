@@ -290,7 +290,7 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
         ns_hdr->unix_nsecs = htonl(now.tv_nsec);
         ns_hdr->engine_type = ns->engine_type;  //单字节不需要大小段转换
         ns_hdr->engine_id = ns->engine_id;
-        ns_hdr->sampling_interval = htonl(ns->sample_interval);
+        ns_hdr->sampling = htons((((uint16_t)ns->sample_mode << 14) & 0xc000) | (ns->sample_interval & 0x3fff));
     }
 
     ns_hdr = ns->packet.data;
@@ -298,8 +298,8 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
     ns_hdr->flow_seq = htonl(ns->netstream_cnt++);
 
     ns_rec = ofpbuf_put_zeros(&ns->packet, sizeof *ns_rec);
-    ns_rec->src_addr = htonl(ns_flow->nw_src);
-    ns_rec->dst_addr = htonl(ns_flow->nw_dst);
+    ns_rec->src_addr = ns_flow->nw_src;
+    ns_rec->dst_addr = ns_flow->nw_dst;
     ns_rec->nexthop = htonl(0);
     if (ns->add_id_to_iface) {
         uint16_t iface = (ns->engine_id & 0x7f) << 9;
@@ -338,18 +338,18 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
         memset(&s_tm, 0, sizeof(s_tm));
         memset(&e_tm, 0, sizeof(e_tm));
 
-        ns_db_record.src_ip = ns_rec->src_addr;
-        ns_db_record.dst_ip = ns_rec->dst_addr;
-        ns_db_record.src_port = ns_rec->src_port;
-        ns_db_record.dst_port = ns_rec->dst_port;
-        ns_db_record.input = ns_rec->input;
-        ns_db_record.output = ns_rec->output;
+        ns_db_record.src_ip = ntohl(ns_flow->nw_src);
+        ns_db_record.dst_ip = ntohl(ns_flow->nw_dst);
+        ns_db_record.src_port = ntohs(ns_rec->src_port);
+        ns_db_record.dst_port = ntohs(ns_rec->dst_port);
+        ns_db_record.input = ns_flow->in_port;
+        ns_db_record.output = ns_flow->output_iface;
         ns_db_record.start_time = ns_flow->first_timestamp;
         ns_db_record.end_time = ns_flow->last_timestamp;
-        ns_db_record.packet_count = ns_rec->packet_count;
-        ns_db_record.byte_count = ns_rec->byte_count;
+        ns_db_record.packet_count = ns_flow->packet_count;
+        ns_db_record.byte_count = ns_flow->byte_count;
         ns_db_record.duration = ns_db_record.end_time - ns_db_record.start_time;
-        ns_db_record.ip_tos = ns_rec->ip_tos;
+        ns_db_record.ip_tos = ns_flow->nw_tos & IP_DSCP_MASK;
         ns_db_record.sample_interval = ns->sample_interval;
         ns_db_record.bytes_per_pkt = ns_db_record.byte_count / ns_db_record.packet_count;
         ns_db_record.protocol = ns_flow->nw_proto;
@@ -362,9 +362,9 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
                 strcpy(ns_db_record.pro_read, "UDP");
             }       
             struct in_addr addr;
-            addr.s_addr = ns_db_record.src_ip;
+            addr.s_addr = htonl(ns_db_record.src_ip);
             sprintf(ns_db_record.src_ip_port, "%s:%u", inet_ntoa(addr), ns_db_record.src_port);
-            addr.s_addr = ns_db_record.dst_ip;
+            addr.s_addr = htonl(ns_db_record.dst_ip);
             sprintf(ns_db_record.dst_ip_port, "%s:%u", inet_ntoa(addr), ns_db_record.dst_port);
         }else
         {
@@ -375,9 +375,9 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
                 strcpy(ns_db_record.pro_read, "IP-Other");
             }
             struct in_addr addr;
-            addr.s_addr = ns_db_record.src_ip;
+            addr.s_addr = htonl(ns_db_record.src_ip);
             sprintf(ns_db_record.src_ip_port, "%s", inet_ntoa(addr));
-            addr.s_addr = ns_db_record.dst_ip;
+            addr.s_addr = htonl(ns_db_record.dst_ip);
             sprintf(ns_db_record.dst_ip_port, "%s", inet_ntoa(addr));
         }
 
@@ -629,8 +629,9 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
         sqlite3_bind_int(stmt_main_table, 17, ns_db_record.packet_count);
         sqlite3_bind_int(stmt_main_table, 18, ns_db_record.byte_count);
         sqlite3_bind_int(stmt_main_table, 19, ns_db_record.ip_tos);
-        sqlite3_bind_int(stmt_main_table, 20, ns_db_record.bytes_per_pkt);
-        sqlite3_bind_int(stmt_main_table, 21, ns_db_record.sample_interval);
+        sqlite3_bind_int(stmt_main_table, 20, ns_db_record.sample_interval);
+        sqlite3_bind_int(stmt_main_table, 21, ns_db_record.bytes_per_pkt);
+        
         rc = sqlite3_step(stmt_main_table);
         if(rc != SQLITE_DONE)
         {
@@ -769,6 +770,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
         netstream_expire__(ns, ns_flow);
     }
 
+    ns_flow->byte_count += stats->n_bytes;
     ns_flow->packet_count += stats->n_packets;
     ns_flow->tcp_flags |= stats->tcp_flags;
 

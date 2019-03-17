@@ -156,7 +156,7 @@ struct netstream_v5_header {
                                       messages began. */
     uint8_t  engine_type;          /* Engine type. */
     uint8_t  engine_id;            /* Engine id. */
-    uint16_t sampling_interval;    /* Sample interval. */
+    uint16_t sampling;             /* First two bits hold the sampling mode; remaining 14 bits hold value of sampling interval */
 };
 
 /* A NetStream v5 description of a terminating flow.  It is preceded by a
