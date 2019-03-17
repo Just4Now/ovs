@@ -353,6 +353,7 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
         ns_db_record.sample_interval = ns->sample_interval;
         ns_db_record.bytes_per_pkt = ns_db_record.byte_count / ns_db_record.packet_count;
         ns_db_record.protocol = ns_flow->nw_proto;
+        ns_db_record.tcp_flags = ns_rec->tcp_flags;
 
         if (ns_flow->nw_proto == NS_TCP || ns_flow->nw_proto == NS_UDP) {
             if (ns_flow->nw_proto == NS_TCP) {
@@ -454,11 +455,12 @@ netstream_create_database(struct netstream *ns)
             "BYTE_COUNT    INTEGER,"
             "TOS           INTEGER,"
             "SAMPLE_INT    INTEGER,"
-            "BYTES_PER_PKT INTEGER);");
+            "BYTES_PER_PKT INTEGER,"
+            "TCP_FLAGS     INTEGER);");
     rc = sqlite3_exec(db, sqlcmd, 0, 0, &errmsg);
     if( rc != SQLITE_OK ){
         VLOG_ERR_RL(&rl, "Can't create main table netstream in %s."
-                 "(Error message:%s)", db_file_path, errmsg);
+                    "(Error message:%s)", db_file_path, errmsg);
         goto err_create;
     }
 
@@ -577,7 +579,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     bool flag = true;
 
     memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
-    sprintf(sqlcmd, "%s", "INSERT INTO NETSTREAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
+    sprintf(sqlcmd, "%s", "INSERT INTO NETSTREAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
     rc = sqlite3_prepare_v2(db, sqlcmd, strlen(sqlcmd), &stmt_main_table, NULL);
     if(rc != SQLITE_OK)
     {
@@ -631,6 +633,7 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
         sqlite3_bind_int(stmt_main_table, 19, ns_db_record.ip_tos);
         sqlite3_bind_int(stmt_main_table, 20, ns_db_record.sample_interval);
         sqlite3_bind_int(stmt_main_table, 21, ns_db_record.bytes_per_pkt);
+        sqlite3_bind_int(stmt_main_table, 22, ns_db_record.tcp_flags);
         
         rc = sqlite3_step(stmt_main_table);
         if(rc != SQLITE_DONE)
@@ -709,7 +712,7 @@ netstream_log_path_init(struct netstream *ns)
 }
 
 void
-netstream_flow_update(struct netstream *ns, const struct flow *flow,
+netstream_flow_update(struct netstream *ns, const struct flow *flow, ofp_port_t input_iface,
                       ofp_port_t output_iface, const struct dpif_flow_stats *stats)
     OVS_EXCLUDED(mutex)
 {
@@ -732,7 +735,6 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
         } 
 
         ns_flow = xzalloc(sizeof *ns_flow);
-        ns_flow->in_port = flow->in_port.ofp_port;
         ns_flow->nw_src = flow->nw_src;
         ns_flow->nw_dst = flow->nw_dst;
         ns_flow->nw_tos = flow->nw_tos;
@@ -741,6 +743,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
         ns_flow->tp_dst = flow->tp_dst;
         ns_flow->created = stats->used;
         ns_flow->output_iface = output_iface;
+        ns_flow->in_port = input_iface;
         ns_flow->first_timestamp = ns_flow->last_timestamp = time_wall();
         hmap_insert(&ns->flows, &ns_flow->hmap_node, netstream_flow_hash(flow));
     }

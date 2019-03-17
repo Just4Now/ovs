@@ -1440,7 +1440,7 @@ process_upcall(struct udpif *udpif, struct upcall *upcall,
             stats.used = time_msec();
             stats.tcp_flags = ntohs(flow->tcp_flags);
 
-            netstream_flow_update(upcall->netstream, flow, 
+            netstream_flow_update(upcall->netstream, flow, upcall->cookie.ofp_in_port,
                                   upcall->cookie.netstream.output, &stats);
         }
         break;
