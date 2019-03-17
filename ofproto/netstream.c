@@ -352,14 +352,15 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
         ns_db_record.ip_tos = ns_rec->ip_tos;
         ns_db_record.sample_interval = ns->sample_interval;
         ns_db_record.bytes_per_pkt = ns_db_record.byte_count / ns_db_record.packet_count;
+        ns_db_record.protocol = ns_flow->nw_proto;
 
         if (ns_flow->nw_proto == NS_TCP || ns_flow->nw_proto == NS_UDP) {
             if (ns_flow->nw_proto == NS_TCP) {
-                strcpy(ns_db_record.protocol, "TCP");
+                strcpy(ns_db_record.pro_read, "TCP");
             }else
             {
-                strcpy(ns_db_record.protocol, "UDP");
-            }         
+                strcpy(ns_db_record.pro_read, "UDP");
+            }       
             struct in_addr addr;
             addr.s_addr = ns_db_record.src_ip;
             sprintf(ns_db_record.src_ip_port, "%s:%u", inet_ntoa(addr), ns_db_record.src_port);
@@ -368,10 +369,10 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
         }else
         {
             if (ns_flow->nw_proto == NS_ICMP) {
-                strcpy(ns_db_record.protocol, "ICMP");
+                strcpy(ns_db_record.pro_read, "ICMP");
             }else
             {
-                strcpy(ns_db_record.protocol, "IP-Other");
+                strcpy(ns_db_record.pro_read, "IP-Other");
             }
             struct in_addr addr;
             addr.s_addr = ns_db_record.src_ip;
@@ -446,6 +447,7 @@ netstream_create_database(struct netstream *ns)
             "DST_IP_PORT   CHAR(32),"
             "S_TIME_READ   CHAR(32),"
             "E_TIME_READ   CHAR(32),"
+            "PRO_READ      CHAR(32),"
             "INPUT         INTEGER,"
             "OUTPUT        INTEGER,"
             "PACKET_COUNT  INTEGER,"
@@ -569,30 +571,37 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
 {
     /* sqlite 执行准备 */
     sqlite3_stmt *stmt_main_table;
-    sqlite3_stmt *stmt_sub_table[NS_SQL_TABLE_INDEX_NUM];
+    sqlite3_stmt *stmt_sub_table[NS_SQL_TABLE_INDEX_NUM][2];
     int rc;
     char *sqlcmd = (char *)malloc(NS_MAX_SQL_CMD_LENGTH);
+    bool flag = true;
 
     memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
-    sprintf(sqlcmd, "%s", "INSERT INTO NETSTRTEAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
-    rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_main_table, 0);
+    sprintf(sqlcmd, "%s", "INSERT INTO NETSTREAM VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);");
+    rc = sqlite3_prepare_v2(db, sqlcmd, strlen(sqlcmd), &stmt_main_table, NULL);
     if(rc != SQLITE_OK)
     {
-        goto err_main;
+        flag = false;
+        goto err;
     }
 
     for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
     {
         memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
-        /* 如果在INSERT语句末尾指定了ON DUPLICATE KEY UPDATE，
-           如果插入行后会导致在一个UNIQUE索引或PRIMARY KEY中出现重复值，
-           则执行UPDATE；如果不会导致唯一值列重复的问题，则插入新行。 */
-        sprintf(sqlcmd, "INSERT INTO %s (VALUE,COUNT) VALUES(?,1) "
-                "ON DUPLICATE KEY UPDATE COUNT=COUNT+1;", sql_index_name[i]);
-        rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_sub_table[i], 0);
+        sprintf(sqlcmd, "INSERT OR IGNORE INTO %s VALUES(?,0);", sql_index_name[i * 2 + 1]);
+        rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_sub_table[i][0], NULL);
         if(rc != SQLITE_OK)
         {
-            goto err_sub;
+            flag = false;
+            goto err;
+        }
+        memset(sqlcmd, 0, NS_MAX_SQL_CMD_LENGTH);
+        sprintf(sqlcmd, "UPDATE %s SET COUNT = COUNT + 1 WHERE VALUE = ?;", sql_index_name[i * 2 + 1]);  
+        rc = sqlite3_prepare(db, sqlcmd, strlen(sqlcmd), &stmt_sub_table[i][1], NULL);
+        if(rc != SQLITE_OK)
+        {
+            flag = false;
+            goto err;
         }
     }
 
@@ -600,12 +609,13 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
     while(netstream_db_dequeue(&ns->ns_db_que, &ns_db_record)){
 
         sqlite3_reset(stmt_main_table);
+
         sqlite3_bind_text(stmt_main_table, 1, ns->bridge_name, strlen(ns->bridge_name), NULL);
         sqlite3_bind_int(stmt_main_table, 2, ns_db_record.src_ip);
         sqlite3_bind_int(stmt_main_table, 3, ns_db_record.dst_ip);
         sqlite3_bind_int(stmt_main_table, 4, ns_db_record.src_port);
         sqlite3_bind_int(stmt_main_table, 5, ns_db_record.dst_port);
-        sqlite3_bind_text(stmt_main_table, 6, ns_db_record.protocol, strlen(ns_db_record.protocol), NULL);
+        sqlite3_bind_int(stmt_main_table, 6, ns_db_record.protocol);
         sqlite3_bind_int(stmt_main_table, 7, ns_db_record.start_time);
         sqlite3_bind_int(stmt_main_table, 8, ns_db_record.end_time);
         sqlite3_bind_int(stmt_main_table, 9, ns_db_record.duration);
@@ -613,53 +623,67 @@ netstream_write_into_db(sqlite3 *db, struct netstream *ns)
         sqlite3_bind_text(stmt_main_table, 11, ns_db_record.dst_ip_port, strlen(ns_db_record.dst_ip_port), NULL);
         sqlite3_bind_text(stmt_main_table, 12, ns_db_record.s_time_read, strlen(ns_db_record.s_time_read), NULL);
         sqlite3_bind_text(stmt_main_table, 13, ns_db_record.e_time_read, strlen(ns_db_record.e_time_read), NULL);
-        sqlite3_bind_int(stmt_main_table, 14, ns_db_record.input);
-        sqlite3_bind_int(stmt_main_table, 15, ns_db_record.output);
-        sqlite3_bind_int(stmt_main_table, 16, ns_db_record.packet_count);
-        sqlite3_bind_int(stmt_main_table, 17, ns_db_record.byte_count);
-        sqlite3_bind_int(stmt_main_table, 18, ns_db_record.ip_tos);
-        sqlite3_bind_int(stmt_main_table, 19, ns_db_record.bytes_per_pkt);
-        sqlite3_bind_int(stmt_main_table, 20, ns_db_record.sample_interval);
+        sqlite3_bind_text(stmt_main_table, 14, ns_db_record.pro_read, strlen(ns_db_record.pro_read), NULL);
+        sqlite3_bind_int(stmt_main_table, 15, ns_db_record.input);
+        sqlite3_bind_int(stmt_main_table, 16, ns_db_record.output);
+        sqlite3_bind_int(stmt_main_table, 17, ns_db_record.packet_count);
+        sqlite3_bind_int(stmt_main_table, 18, ns_db_record.byte_count);
+        sqlite3_bind_int(stmt_main_table, 19, ns_db_record.ip_tos);
+        sqlite3_bind_int(stmt_main_table, 20, ns_db_record.bytes_per_pkt);
+        sqlite3_bind_int(stmt_main_table, 21, ns_db_record.sample_interval);
         rc = sqlite3_step(stmt_main_table);
-        if(rc != SQLITE_OK)
+        if(rc != SQLITE_DONE)
         {
-            goto err_main;
+            flag = false;
+            goto err;
         }
 
-        sqlite3_bind_int(stmt_sub_table[0], 1, ns_db_record.src_ip);
-        sqlite3_bind_int(stmt_sub_table[1], 1, ns_db_record.dst_ip);
-        sqlite3_bind_int(stmt_sub_table[2], 1, ns_db_record.src_port);
-        sqlite3_bind_int(stmt_sub_table[3], 1, ns_db_record.dst_port);
-        sqlite3_bind_text(stmt_sub_table[4], 1, ns_db_record.protocol, strlen(ns_db_record.protocol), NULL);
-        sqlite3_bind_int(stmt_sub_table[5], 1, ns_db_record.start_time);
-        sqlite3_bind_int(stmt_sub_table[6], 1, ns_db_record.start_time);
         for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
         {
-            rc = sqlite3_step(stmt_sub_table[i]);
-            if(rc != SQLITE_OK)
+            for(size_t j = 0; j < 2; j++)
             {
-                goto err_sub;
+                sqlite3_reset(stmt_sub_table[i][j]);
+            }
+        }
+
+        for(size_t i = 0; i < 2; i++)
+        {
+            sqlite3_bind_int(stmt_sub_table[0][i], 1, ns_db_record.src_ip);
+            sqlite3_bind_int(stmt_sub_table[1][i], 1, ns_db_record.dst_ip);
+            sqlite3_bind_int(stmt_sub_table[2][i], 1, ns_db_record.src_port);
+            sqlite3_bind_int(stmt_sub_table[3][i], 1, ns_db_record.dst_port);
+            sqlite3_bind_int(stmt_sub_table[4][i], 1, ns_db_record.protocol);
+            sqlite3_bind_int(stmt_sub_table[5][i], 1, ns_db_record.start_time);
+            sqlite3_bind_int(stmt_sub_table[6][i], 1, ns_db_record.start_time);
+        }
+
+        for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
+        {
+            for(size_t j = 0; j < 2; j++)
+            {
+                rc = sqlite3_step(stmt_sub_table[i][j]);
+                if(rc != SQLITE_DONE)
+                {
+                    flag = false;
+                    goto err;
+                }
             }
         }
 
         memset(&ns_db_record, 0, sizeof ns_db_record);
     }
 
-    sqlite3_finalize(stmt_main_table);
-    return true;
-
-    err_main:
-    sqlite3_finalize(stmt_main_table);
-    return false;
-
-    err_sub:
-    sqlite3_finalize(stmt_main_table);
+    err:
     for(size_t i = 0; i < NS_SQL_TABLE_INDEX_NUM; i++)
     {
-        sqlite3_finalize(stmt_sub_table[i]);
+        for(size_t j = 0; j < 2; j++)
+        {
+            sqlite3_finalize(stmt_sub_table[i][j]);
+        }
     }
+    sqlite3_finalize(stmt_main_table);
     free(sqlcmd);
-    return false;
+    return flag;
 }
 
 static void

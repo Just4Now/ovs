@@ -30,7 +30,7 @@
 #define NS_UDP 17
 
 
-#define MAX(a,b)  (((a)>(b))?(a):(b))
+#define MIN(a,b)  (((a)<(b))?(a):(b))
 
 struct query_single_cond
 {
@@ -434,7 +434,7 @@ ns_query_database(struct query_conditions *q_c)
     while ((ns_ptr = readdir(ns_dir)) != NULL)
     {
         int n = n_stable;
-        if(strstr(ns_ptr->d_name, "-netstream.db") != NULL){
+        if(strstr(ns_ptr->d_name, "-netstream.db") && !strstr(ns_ptr->d_name, "journal")){
             sprintf(ns_log_file_path, "%s/%s", ns_log_dir_path, ns_ptr->d_name);
             rc = sqlite3_open(ns_log_file_path, &db);
             if (rc != SQLITE_OK) {
@@ -565,7 +565,6 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
     char *err_msg;
     char **result;
     int query_offset = 0;
-    int first_flag = true;
     char *sqlcmd_tmp = (char *)malloc(NS_MAX_SQL_CMD_LENGTH); 
     struct termios new_setting,init_setting;
    
@@ -584,63 +583,65 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
         goto quit;
     }
 
-    printf("Bri-name Protocol SrcIP(Port)       DstIP(Port)       Input Output Pkts\n");
-    printf("------   -------- ----------------- ----------------- ----  ----   --------\n");
+    printf("Bri-name Protocol SrcIP(Port)         DstIP(Port)         Input Output Pkts\n");
+    printf("------   -------- ------------------- ------------------- ----  ----   ---------\n");
 
     do
     {
         memset(sqlcmd_tmp, 0, NS_MAX_SQL_CMD_LENGTH);
         /* 加入limit offset限制 */
-        sprintf(sqlcmd_tmp, " LIMIT %d OFFSET %d;", NS_MAX_QUERY_ROW, query_offset);
-        strcat(sqlcmd, sqlcmd_tmp);
-        rc = sqlite3_get_table(db, sqlcmd, &result, &n_row, &n_column, &err_msg);
+        sprintf(sqlcmd_tmp, "%s LIMIT %d OFFSET %d;", sqlcmd, NS_MAX_QUERY_ROW, query_offset);
+        rc = sqlite3_get_table(db, sqlcmd_tmp, &result, &n_row, &n_column, &err_msg);
         if (rc != SQLITE_OK) {
             printf("Get table error(Error message:%s).\n" ,err_msg);
             sqlite3_free(err_msg);
             goto quit;
         }
 
-        int left_n_column = n_column;
-        while(left_n_column > 0){
-            int max_display_records = verbose ? NS_DISPLAY_MORE_LENGTH_VERBOSE : NS_DISPLAY_MORE_LENGTH;
-            int actual_records = MAX(left_n_column, max_display_records);
-            for(int i = 1; i < actual_records; i++)
+        int left_n_row = n_row;
+        bool verbose_first_flag = true;
+        int i = 1;
+        int j = 0;
+        int max_display_records = verbose ? NS_DISPLAY_MORE_LENGTH_VERBOSE : NS_DISPLAY_MORE_LENGTH;
+        while(left_n_row > 0){
+            int actual_records = MIN(left_n_row, max_display_records);
+            for(; i <= actual_records + j; i++)
             {
                 /* SELECT BRIDGE_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT, 0-4
                    S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT, 5-10
                    TOS,SAMPLE_INT,BYTES_PER_PKT FROM NETSTREAM 11-13 */
                 if (verbose) {
-                    printf("-6s %-8s %-22s %-22s %-4s %-4s %-8s\n", result[i *  n_column], \
+                    if (!verbose_first_flag) {
+                        printf("\n");
+                    }else
+                    {
+                        verbose_first_flag = false;
+                    }
+                    printf("%-8s %-8s %-19s %-19s %-4s  %-4s   %-9s\n", result[i *  n_column], \
                            result[i *  n_column + 1], result[i *  n_column + 3], \
                            result[i *  n_column + 4], result[i *  n_column + 7], \
                            result[i *  n_column + 8], result[i *  n_column + 9]);
-                    printf("SampleInterval: %-8s       Tos: %-16s\n", result[i *  n_column + 12], \
+                    printf("SampleInterval: %16s      Tos: %25s\n", result[i *  n_column + 12], \
                            result[i *  n_column + 11]);
-                    printf("Bytes: %-20s    Bytes/Pkts: %-16s \n",  \
+                    printf("Bytes: %25s      Bytes/Pkts: %18s\n",  \
                            result[i *  n_column + 10], result[i *  n_column + 13]);
-                    printf("StartTime: %-19s EndTime: %-19s Durations: %-8s s\n", \
-                           result[i *  n_column + 5], result[i *  n_column + 6], \
-                           result[i *  n_column + 2]); 
-                    if (first_flag) {
-                        first_flag = false;
-                    }else
-                    {
-                        printf("\n");
-                    }               
+                    printf("StartTime: %21s      EndTime: %21s\n", \
+                           result[i *  n_column + 5], result[i *  n_column + 6]);
+                    printf("Durations: %20ss\n",result[i *  n_column + 2]);            
                 }else
                 {
                     /* SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,
                        INPUT,OUTPUT,PACKET_COUNT FROM NETSTREAM; */
-                    printf("%-6s %-8s %-22s %-22s %-4s %-4s %-8s\n", result[i *  n_column], \
+                    printf("%-8s %-8s %-19s %-19s %-4s  %-4s   %-9s\n", result[i *  n_column], \
                            result[i *  n_column + 1], result[i *  n_column + 2], \
                            result[i *  n_column + 3], result[i *  n_column + 4], \
                            result[i *  n_column + 5], result[i *  n_column + 6]);
                 }
                 
             }
-
-            left_n_column -= NS_DISPLAY_MORE_LENGTH;    //最多一次显示24行
-            if (left_n_column > 0) {
+            j += (i - 1);
+            left_n_row -= max_display_records;    //最多一次显示24或6行
+            if (left_n_row > 0) {
                 /* 实现简单的more效果 */
                 int c;
                 do
