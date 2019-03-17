@@ -124,7 +124,7 @@ netstream_set_options(struct netstream *ns,
     ns->inactive_timeout = ns_options->inactive_timeout * 1000;
 
     old_timeout = ns->active_timeout;
-    ns->active_timeout = ns_options->inactive_timeout * 1000 * 60;
+    ns->active_timeout = ns_options->active_timeout * 1000 * 60;
     if (old_timeout != ns->active_timeout) {
         ns->reconfig_active_timeout = time_msec();
         ns->next_timeout = time_msec();
@@ -742,6 +742,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow, ofp_port_t 
         ns_flow->tp_src = flow->tp_src;
         ns_flow->tp_dst = flow->tp_dst;
         ns_flow->created = stats->used;
+        ns_flow->last_expired = stats->used;
         ns_flow->output_iface = output_iface;
         ns_flow->in_port = input_iface;
         ns_flow->first_timestamp = ns_flow->last_timestamp = time_wall();
