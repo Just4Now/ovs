@@ -712,7 +712,7 @@ netstream_log_path_init(struct netstream *ns)
 }
 
 void
-netstream_flow_update(struct netstream *ns, const struct flow *flow, ofp_port_t input_iface,
+netstream_flow_update(struct netstream *ns, const struct flow *flow, 
                       ofp_port_t output_iface, const struct dpif_flow_stats *stats)
     OVS_EXCLUDED(mutex)
 {
@@ -744,7 +744,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow, ofp_port_t 
         ns_flow->created = stats->used;
         ns_flow->last_expired = stats->used;
         ns_flow->output_iface = output_iface;
-        ns_flow->in_port = input_iface;
+        ns_flow->in_port = flow->in_port.ofp_port;
         ns_flow->first_timestamp = ns_flow->last_timestamp = time_wall();
         hmap_insert(&ns->flows, &ns_flow->hmap_node, netstream_flow_hash(flow));
     }

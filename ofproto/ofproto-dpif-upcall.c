@@ -1439,9 +1439,10 @@ process_upcall(struct udpif *udpif, struct upcall *upcall,
             stats.n_bytes = dp_packet_size(packet);
             stats.used = time_msec();
             stats.tcp_flags = ntohs(flow->tcp_flags);
-
-            netstream_flow_update(upcall->netstream, flow, upcall->cookie.ofp_in_port,
-                                  upcall->cookie.netstream.output, &stats);
+            struct flow flow_ns;
+            memcpy(&flow_ns, flow, sizeof flow_ns);
+            flow_ns.in_port.ofp_port = upcall->ofp_in_port;
+            netstream_flow_update(upcall->netstream, &flow_ns, upcall->cookie.netstream.output, &stats);
         }
         break;
     case IPFIX_UPCALL:
