@@ -23,7 +23,7 @@
 #define NS_MAX_VALUE_LENGTH 32
 #define NS_MAX_SQL_CMD_LENGTH 1024
 #define NS_DISPLAY_MORE_LENGTH 24
-#define NS_DISPLAY_MORE_LENGTH_VERBOSE 6
+#define NS_DISPLAY_MORE_LENGTH_VERBOSE 4
 
 #define NS_ICMP 1
 #define NS_TCP 6
@@ -416,7 +416,7 @@ ns_query_database(struct query_conditions *q_c)
     if (q_c->verbose) {
         n_stable += sprintf(sqlcmd, "SELECT BRIDGE_NAME,PRO_READ,DURATION,SRC_IP_PORT,DST_IP_PORT,"
                 "S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT,"
-                "TOS,SAMPLE_INT,BYTES_PER_PKT FROM NETSTREAM ");
+                "TOS,SAMPLE_INT,BYTES_PER_PKT,TCP_FLAGS FROM NETSTREAM ");
     }else
     {
         n_stable += sprintf(sqlcmd, "SELECT BRIDGE_NAME,PRO_READ,SRC_IP_PORT,DST_IP_PORT,"
@@ -609,7 +609,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
             {
                 /* SELECT BRIDGE_NAME,PROTOCOL,DURATION,SRC_IP_PORT,DST_IP_PORT, 0-4
                    S_TIME_READ,E_TIME_READ,INPUT,OUTPUT,PACKET_COUNT,BYTE_COUNT, 5-10
-                   TOS,SAMPLE_INT,BYTES_PER_PKT FROM NETSTREAM 11-13 */
+                   TOS,SAMPLE_INT,BYTES_PER_PKT,TCP_FLAGS FROM NETSTREAM 11-14 */
                 if (verbose) {
                     if (!verbose_first_flag) {
                         printf("\n");
@@ -627,7 +627,15 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
                            result[i *  n_column + 10], result[i *  n_column + 13]);
                     printf("StartTime: %21s      EndTime: %21s\n", \
                            result[i *  n_column + 5], result[i *  n_column + 6]);
-                    printf("Durations: %20ss\n",result[i *  n_column + 2]);            
+                    printf("Durations: %20ss",result[i *  n_column + 2]);
+                    if (strcmp(result[i *  n_column + 1], "TCP") == 0) {
+                        uint8_t tcp_flags;
+                        sscanf(result[i *  n_column + 14], "%u", &tcp_flags);
+                        printf("      TCP_FLAGS:                0x%02x\n", tcp_flags);
+                    }else
+                    {
+                        printf("\n");
+                    }             
                 }else
                 {
                     /* SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,
@@ -639,7 +647,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
                 }
                 
             }
-            j += (i - 1);
+            j = (i - 1);
             left_n_row -= max_display_records;    //最多一次显示24或6行
             if (left_n_row > 0) {
                 /* 实现简单的more效果 */

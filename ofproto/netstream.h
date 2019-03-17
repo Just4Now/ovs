@@ -14,7 +14,7 @@
 #define NS_ICMP 1
 #define NS_TCP 6
 #define NS_UDP 17
-#define NS_MAX_SQL_CMD_LENGTH 512
+#define NS_MAX_SQL_CMD_LENGTH 1024
 #define NS_SQL_TABLE_INDEX_NUM 7
 
 #define NS_SAMPLE_MODE_DEFAULT RANDOM_PACKETS
@@ -58,7 +58,8 @@ struct netstream_db_record{
     uint8_t protocol;
     uint8_t ip_tos;
     uint16_t sample_interval;
-    uint8_t pad[4];
+    uint8_t tcp_flags;
+    uint8_t pad[2];
 };
 
 struct netstream_db_queue{
