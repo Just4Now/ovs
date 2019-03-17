@@ -1,6 +1,6 @@
 {"name": "Open_vSwitch",
  "version": "7.16.1",
- "cksum": "2605702133 25605",
+ "cksum": "386046807 25605",
  "tables": {
    "Open_vSwitch": {
      "columns": {
@@ -499,7 +499,7 @@
          "type": "boolean"},
        "sample_interval": {
          "type": {"key": {"type": "integer",
-                          "minInteger": 1, "maxInteger": 65535},
+                          "minInteger": 1, "maxInteger": 16383},
                   "min": 0, "max": 1}},
        "inactive_timeout": {
          "type": {"key": {"type": "integer",

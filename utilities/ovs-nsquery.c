@@ -217,7 +217,7 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
                 if (nsquery_check_ip(optarg, &addr)) {
                     q_c->q_s_cond[SRC_IP].is_specified = true;
                     q_c->cond_br_only = false;
-                    sprintf(q_c->q_s_cond[SRC_IP].value, "%u", (uint32_t)addr.s_addr);
+                    sprintf(q_c->q_s_cond[SRC_IP].value, "%u", ntohl((uint32_t)addr.s_addr));
                 }else
                 {
                     printf("Invalid source ip addresss:%s.\n", optarg);
@@ -228,7 +228,7 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
                 if (nsquery_check_ip(optarg, &addr)) {
                     q_c->q_s_cond[DST_IP].is_specified = true;
                     q_c->cond_br_only = false;
-                    sprintf(q_c->q_s_cond[DST_IP].value, "%u", (uint32_t)addr.s_addr);
+                    sprintf(q_c->q_s_cond[DST_IP].value, "%u", ntohl((uint32_t)addr.s_addr));
                 }else
                 {
                     printf("Invalid destination ip addresss:%s.\n", optarg);
