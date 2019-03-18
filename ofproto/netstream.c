@@ -173,7 +173,9 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
 
     /* 发送已经累积的NetStream报文 */
     if (ns->packet.size) {
-        collectors_send(ns->collectors, ns->packet.data, ns->packet.size);
+        if (collectors_send(ns->collectors, ns->packet.data, ns->packet.size) != 0) {
+            VLOG_ERR_RL(&rl, "%s: NetStream packet send fail.", ns->bridge_name);
+        }
         ns->packet.size = 0;
     }
 
