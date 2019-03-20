@@ -85,7 +85,7 @@ static void nsquery_usage();
 static bool nsquery_check_ip(char *, struct in_addr *);
 static bool ns_str2uint16(char *, uint16_t *);
 static bool ns_str2uint8(char *, uint8_t *);
-static bool ns_str2timestamp(char *, uint64_t *);
+static bool ns_str2timestamp(char *, time_t *);
 static bool ns_check_time(struct query_conditions *q_c, uint64_t start_time, uint64_t end_time);
 static void ns_query_database(struct query_conditions *);
 static void parser_commands(int , char **, struct query_conditions *);
@@ -151,12 +151,13 @@ nsquery_usage()
            "    Notes:if you specify the start-time condition and the end-time condition at"
            "    the same time, Keep in mind that the start-time should be earlier than the "
            "    end time.\n"
-           "\n  Of course,it's ok to specify nothing and specify multiple conditions.There "
+           "\n  Of course,it's ok to specify nothing or specify multiple conditions.There "
            "are some query examples below:\n"
            "    # ovs-nsquery\n"
            "    # ovs-nsquery --br-name=\"s1\"\n"
            "    # ovs-nsquery --src-ip=10.0.0.1 --dst-ip=20.0.0.1 --src-port=12 --dst-port=63\n"
            "    # ovs-nsquery --start-time=\"2018-01-01 00:00:00\" --end-time=\"2018-01-01 24:00:00\"\n"
+           "    # ovs-nsquery --src-ip=10.0.0.1 --protocol=TCP\n"
            "    # ovs-nsquery --protocol=6 --verbose\n");     
     printf("\nOther options:\n"
            "  --help                  display this help message\n"
@@ -168,8 +169,7 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
     char c;
     uint16_t port;
     uint8_t protocol;
-    uint64_t start_time;
-    uint64_t end_time;
+    time_t  start_time, end_time;
     int longindex = NS_MAX_QUERY_CONDITION + 2;
 
     do{
@@ -291,7 +291,7 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
                 {
                     q_c->q_s_cond[START_TIME].is_specified = true;
                     q_c->cond_br_only = false;
-                    sprintf(q_c->q_s_cond[START_TIME].value, "%u", start_time);
+                    sprintf(q_c->q_s_cond[START_TIME].value, "%ld", start_time);
                 }else
                 {
                     printf("Invalid start time(%s).\n", optarg);
@@ -303,7 +303,7 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
                 {
                     q_c->q_s_cond[END_TIME].is_specified = true;
                     q_c->cond_br_only = false;
-                    sprintf(q_c->q_s_cond[END_TIME].value, "%u", end_time);
+                    sprintf(q_c->q_s_cond[END_TIME].value, "%ld", end_time);
                 }else
                 {
                     printf("Invalid end time(%s).\n", optarg);
@@ -352,7 +352,15 @@ static bool
 ns_str2uint8(char *str_protocpl, uint8_t *protocol)
 {
     int i = 0;
-    while(str_protocpl[i] != '\0'){
+    if (strcmp(str_protocpl, "ICMP") == 0) {
+        *protocol = NS_ICMP;
+    }else if (strcmp(str_protocpl, "TCP") == 0) {
+        *protocol = NS_TCP;
+    }else if (strcmp(str_protocpl, "UDP") == 0) {
+        *protocol = NS_UDP;
+    }else
+    {
+        while(str_protocpl[i] != '\0'){
         if (str_protocpl[i] >= '0' && str_protocpl[i] <= '9') {
             *protocol = *protocol * 10 + str_protocpl[i] - '0';
         }else
@@ -360,19 +368,27 @@ ns_str2uint8(char *str_protocpl, uint8_t *protocol)
             return false;
         }
         ++i;
+        }
     }
     return true;
 }
 
 static bool
-ns_str2timestamp(char *str_timestamp, uint64_t *timestamp)
+ns_str2timestamp(char *str_timestamp, time_t *timestamp)
 {
     struct tm tm_tmp;
+    int year, month, day, hour, minute, second;
     memset(&tm_tmp, 0, sizeof tm_tmp);
-    if(sscanf(str_timestamp, "%d-%d-%d %d:%d:%d", &tm_tmp.tm_year, &tm_tmp.tm_mon, \
-              &tm_tmp.tm_mday, &tm_tmp.tm_hour, &tm_tmp.tm_min, &tm_tmp.tm_sec) == 6){
-        *timestamp = (uint64_t)mktime(&tm_tmp);
-        return true;}
+    if(sscanf(str_timestamp, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second) == 6){
+        tm_tmp.tm_year = year -1900;
+        tm_tmp.tm_mon = month - 1;
+        tm_tmp.tm_mday = day;
+        tm_tmp.tm_hour = hour;
+        tm_tmp.tm_min = minute;
+        tm_tmp.tm_sec = second;
+        *timestamp = mktime(&tm_tmp);
+        return true;
+    }
     return false;
 }
 
@@ -540,7 +556,7 @@ ns_query_find_best_index(sqlite3 *db, struct query_conditions *q_c, char *best_i
                     break;
                 }
                 
-                sscanf(result[1], "%u", &count);
+                sscanf(result[1], "%lu", &count);
                 
                 if (count < best_count) {
                     best_count = count;
@@ -584,7 +600,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
     }
 
     printf("Bri-name Protocol SrcIP(Port)         DstIP(Port)         Input Output Pkts\n");
-    printf("------   -------- ------------------- ------------------- ----  ----   ---------\n");
+    printf("------   -------- ------------------- ------------------- ----- -----  ---------\n");
 
     do
     {
@@ -617,7 +633,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
                     {
                         verbose_first_flag = false;
                     }
-                    printf("%-8s %-8s %-19s %-19s %-4s  %-4s   %-9s\n", result[i *  n_column], \
+                    printf("%-8s %-8s %-19s %-19s %-5s %-5s  %-9s\n", result[i *  n_column], \
                            result[i *  n_column + 1], result[i *  n_column + 3], \
                            result[i *  n_column + 4], result[i *  n_column + 7], \
                            result[i *  n_column + 8], result[i *  n_column + 9]);
@@ -640,7 +656,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
                 {
                     /* SELECT BR_NAME,PROTOCOL,SRC_IP_PORT,DST_IP_PORT,
                        INPUT,OUTPUT,PACKET_COUNT FROM NETSTREAM; */
-                    printf("%-8s %-8s %-19s %-19s %-4s  %-4s   %-9s\n", result[i *  n_column], \
+                    printf("%-8s %-8s %-19s %-19s %-5s %-5s  %-9s\n", result[i *  n_column], \
                            result[i *  n_column + 1], result[i *  n_column + 2], \
                            result[i *  n_column + 3], result[i *  n_column + 4], \
                            result[i *  n_column + 5], result[i *  n_column + 6]);
