@@ -733,7 +733,8 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
         
         if (hmap_count(&ns->flows) >= ns->flow_cache_number) {
             VLOG_ERR_RL(&rl, "The maximum number of streams has been reached.\n");
-            goto end;
+            ovs_mutex_unlock(&mutex);
+            return;
         } 
 
         ns_flow = xzalloc(sizeof *ns_flow);
@@ -752,17 +753,6 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     }
 
     ns_flow->last_timestamp = time_wall();
-
-    /* 对于TCP连接，当有标志为FIN或RST的报文发送时，表示一次会话结束。当一条已经存在的NetStream流中流过
-    一条标志为FIN或RST的报文时，可以立即老化相应的NetStream流，节省内存空间。因此建议在设备上开启由TCP
-    连接的FIN和RST报文触发老化的老化方式。 */
-    if (ns_flow->nw_proto == NS_TCP && ns_flow->packet_count > 1 &&
-        (stats->tcp_flags & (TCP_FIN | TCP_RST))) {
-        netstream_expire__(ns, ns_flow);
-        hmap_remove(&ns->flows, &ns_flow->hmap_node);
-        free(ns_flow);
-        goto end;
-    }
 
     if (ns_flow->output_iface != output_iface) {
         netstream_expire__(ns, ns_flow);
@@ -785,7 +775,16 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
         ns_flow->used = used;   //更新流上次使用时间
     }
 
-    end:
+    /* 对于TCP连接，当有标志为FIN或RST的报文发送时，表示一次会话结束。当一条已经存在的NetStream流中流过
+    一条标志为FIN或RST的报文时，可以立即老化相应的NetStream流，节省内存空间。因此建议在设备上开启由TCP
+    连接的FIN和RST报文触发老化的老化方式。 */
+    if (ns_flow->nw_proto == NS_TCP && ns_flow->packet_count >= 1 &&
+        (stats->tcp_flags & (TCP_FIN | TCP_RST))) {
+        netstream_expire__(ns, ns_flow);
+        hmap_remove(&ns->flows, &ns_flow->hmap_node);
+        free(ns_flow);
+    }
+
     ovs_mutex_unlock(&mutex);
 }
 
