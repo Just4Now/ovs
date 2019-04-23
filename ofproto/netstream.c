@@ -290,7 +290,6 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
         ns_hdr->unix_nsecs = htonl(now.tv_nsec);
         ns_hdr->engine_type = ns->engine_type;  //单字节不需要大小段转换
         ns_hdr->engine_id = ns->engine_id;
-        ns_hdr->sampling = 0;
     }
 
     ns_hdr = ns->packet.data;
