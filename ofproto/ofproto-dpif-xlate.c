@@ -405,7 +405,8 @@ struct xlate_ctx {
      * When translation is otherwise complete, ofpacts_execute_action_set()
      * converts it to a set of "struct ofpact"s that can be translated into
      * datapath actions. */
-    bool action_set_has_group;  /* Action set contains OFPACT_GROUP? */
+    bool 
+    action_set_has_group;  /* Action set contains OFPACT_GROUP? */
     struct ofpbuf action_set;   /* Action set. */
 
     enum xlate_error error;     /* Translation failed. */
@@ -3238,7 +3239,7 @@ compose_sflow_action(struct xlate_ctx *ctx)
 static size_t
 compose_netstream_action(struct xlate_ctx *ctx)
 {
-    VLOG_INFO("enter compose_netstream_action");
+    //VLOG_INFO("enter compose_netstream_action");
     struct netstream *ns = ctx->xbridge->netstream;
     if (!ns || ctx->xin->flow.in_port.ofp_port == OFPP_NONE) {
         return 0;

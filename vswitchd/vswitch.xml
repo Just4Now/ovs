@@ -5423,10 +5423,6 @@ ovs-vsctl add-port br0 p0 -- set Interface p0 type=patch options:peer=p1 \
       engine_type
     </column>
 
-    <column name="add_id_to_interface">
-      add_id_to_interface
-    </column>
-
     <column name="sample_interval">
       sample_interval
     </column>
@@ -5439,15 +5435,15 @@ ovs-vsctl add-port br0 p0 -- set Interface p0 type=patch options:peer=p1 \
       active_timeout
     </column>
 
-    <column name="flow_cache_number">
-      flow_cache_number
+    <column name="max_flow">
+      max_flow
     </column>
 
     <column name="log">
       log
     </column>
 
-    <column name="tcp_flag">
+    <column name="tcp_flags">
       tcp_terminate
     </column>
 

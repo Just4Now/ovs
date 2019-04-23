@@ -1198,8 +1198,6 @@ bridge_configure_netstream(struct bridge *br)
         opts.engine_id = *cfg->engine_id;
     }
 
-    /* Confugure sample mode and value */
-    opts.sample_mode = NS_SAMPLE_MODE_DEFAULT;
     /* sample_interval */
     opts.sample_interval = NS_SAMPLE_INTERVAL_DEFAULT;
     if (cfg->sample_interval) {
@@ -1218,13 +1216,13 @@ bridge_configure_netstream(struct bridge *br)
         opts.active_timeout = *cfg->active_timeout;
     }
 
-    /* flow_cache_number */
-    opts.flow_cache_number = NS_FLOW_CACHE_NUMBER_DEFAULT;
-    if (cfg->flow_cache_number) {
-        opts.flow_cache_number = *cfg->flow_cache_number;
+    /* max_flow */
+    opts.max_flow = NS_MAX_N_FLOW_CACHE_DEFAULT;
+    if (cfg->max_flow) {
+        opts.max_flow = *cfg->max_flow;
     }
 
-    /* Add engine ID to interface number to disambiguate bridgs? */
+    /* Add engine ID to interface number to disambiguate bridgs? 
     opts.add_id_to_iface = cfg->add_id_to_interface;
     if (opts.add_id_to_iface) {
         if (opts.engine_id > 0x7f) {
@@ -1237,13 +1235,13 @@ bridge_configure_netstream(struct bridge *br)
                       "another port when more than 508 ports are used",
                       br->name);
         }
-    }
+    }*/
 
     /* netstream log*/
     opts.log = cfg->log;
 
     /* TCP Flags */
-    opts.tcp_flag = cfg->tcp_flag;
+    opts.tcp_flags = cfg->tcp_flags;
 
     /* Forced expiring */
     opts.forced_expiring = cfg->forced_expiring;
@@ -1256,7 +1254,6 @@ bridge_configure_netstream(struct bridge *br)
     if (ofproto_set_netstream(br->name, br->ofproto, &opts)) {
         VLOG_ERR("bridge %s: problem setting netstream collectors", br->name);
     }
-    VLOG_INFO("bridge %s:setting netstream ok", br->name);
     sset_destroy(&opts.collectors);
 }
 

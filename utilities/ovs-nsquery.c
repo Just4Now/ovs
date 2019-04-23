@@ -687,6 +687,7 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
     } while (n_row != 0);
 
     quit:
+    sqlite3_close(db);
     if (tcsetattr(0, TCSANOW, &init_setting) != 0)
     {
         printf("Cannot set the attribution of the terminal.\n");

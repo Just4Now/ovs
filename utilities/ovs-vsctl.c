@@ -192,7 +192,7 @@ main(int argc, char *argv[])
         }
 
         if (seqno == ovsdb_idl_get_seqno(idl)) {
-            ovsdb_idl_wait(idl);    //数据库时间等待处理
+            ovsdb_idl_wait(idl);    //数据库事件等待处理
             poll_block();   //时间等待
         }
     }

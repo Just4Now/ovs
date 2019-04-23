@@ -17,11 +17,11 @@
 #define NS_MAX_SQL_CMD_LENGTH 1024
 #define NS_SQL_TABLE_INDEX_NUM 7
 
-#define NS_SAMPLE_MODE_DEFAULT RANDOM_PACKETS
+
 #define NS_SAMPLE_INTERVAL_DEFAULT 100
 #define NS_INACTIVE_TIMEOUT_DEFAULT 30
 #define NS_ACTIVE_TIMEOUT_DEFAULT 30
-#define NS_FLOW_CACHE_NUMBER_DEFAULT 10240
+#define NS_MAX_N_FLOW_CACHE_DEFAULT 50000
 #define NS_log_DEFAULT false
 #define NS_TCP_FLAGS_DEFAULT false
 
@@ -29,10 +29,7 @@
 
 #define NETSTREAM_V5_VERSION 5
 
-enum SAMPLE_MODE {
-    FIX_PACKETS,
-    RANDOM_PACKETS
-};
+
 
 struct netstream_db_record{
     uint32_t src_ip;
@@ -70,76 +67,68 @@ struct netstream_db_queue{
 };
 
 struct netstream_options {
-    struct sset collectors;
-    uint8_t engine_type;
-    uint8_t engine_id;
-    bool add_id_to_iface;
-    enum SAMPLE_MODE sample_mode;
-    int sample_interval;
-    int inactive_timeout;
-    int active_timeout;
-    int flow_cache_number;
-    bool log;
-    bool tcp_flag;
-    bool forced_expiring;
+    struct sset collectors;    /* NetStream报文输出地址 */
+    uint8_t engine_type;    /* 引擎类型 */
+    uint8_t engine_id;    /* 引擎id */
+    bool add_id_to_iface;    /* add_id_to_iface使能标记 */
+    int sample_interval;    /* 采样间隔 */
+    int inactive_timeout;    /* 非活跃流老化时间 */
+    int active_timeout;    /* 活跃流老化时间 */
+    int max_flow;    /* 最大流缓存数目 */
+    bool log;    /* 流信息数据库写入使能标记 */
+    bool tcp_flags;    /* TCP FIN/RST报文老化使能标记 */
+    bool forced_expiring;    /* TCP FIN/RST报文老化使能标记 */
 };
 
 struct netstream {
-    char bridge_name[NS_MAX_BRIDGE_NAME_LENGTH];
-    uint8_t engine_type;          /* Value of engine_type to use. */
+    char bridge_name[NS_MAX_BRIDGE_NAME_LENGTH];    /* OVS网桥名称,支持最大长度为15 */
+    uint8_t engine_type;          
     uint8_t engine_id;            /* Value of engine_id to use. */
-    uint64_t boot_time;           /* Time when netstream_create() was called. */
+    uint64_t boot_time;           /* 配置创建时间 */
     struct collectors *collectors; /* NetStream collectors. */
     bool add_id_to_iface;         /* Put the 7 least significiant bits of
                                    * 'engine_id' into the most significant
                                    * bits of the interface fields. */
-    bool tcp_flag;
+    bool tcp_flags;
     bool forced_expiring;
 
-    enum SAMPLE_MODE sample_mode;
     uint32_t sample_interval;
 
     bool log;
-    char log_path[NS_MAX_PATH_LOG_LENGTH];
-    struct netstream_db_queue ns_db_que;
+    char log_path[NS_MAX_PATH_LOG_LENGTH];    /* 流信息数据库文件绝对路径 */
+    struct netstream_db_queue ns_db_que;    /* 存储老化流的环形队列 */
 
     uint64_t inactive_timeout; /* Timeout for flows that are expired. */ 
     uint64_t active_timeout; /* Timeout for flows that are still active. */
-    uint64_t next_timeout;   /* Next scheduled timeout. */
-    uint64_t reconfig_active_timeout;  /* When we reconfigured the timeouts. */
+    uint64_t next_timeout;   /* 下一次超时时间 */
 
-    long long int flow_cache_number;
+    long long int max_flow;
 
-    uint32_t netstream_cnt;         /* Flow sequence number for NetStream. */
-    struct ofpbuf packet;         /* NetStream packet being accumulated. */
-
-    struct hmap flows;            /* Contains 'netstream_flows'. */
+    uint32_t netstream_cnt;         /* NetStream流序列号 */
+    struct ofpbuf packet;         /* 缓存的NetStream报文 */
+    struct hmap flows;            /* NetStream流缓存区，包含NetStream流 */
 
     struct ovs_refcount ref_cnt;
 };
 
 struct netstream_flow {
-    struct hmap_node hmap_node;
-
-    uint64_t last_expired;   /* Time this active flow last timed out. */
-    uint64_t created;        /* Time flow was created since time out. */
-
-    ofp_port_t output_iface;      /* Output interface index. */
-    uint16_t tcp_flags;           /* Bitwise-OR of all TCP flags seen. */
-
-    ofp_port_t in_port;           /* Input port. */
-    uint32_t nw_src;              /* IPv4 source address. */
-    uint32_t nw_dst;              /* IPv4 destination address. */
-    uint8_t nw_tos;               /* IP ToS (including DSCP and ECN). */
-    uint8_t nw_proto;             /* IP protocol. */
-    uint16_t tp_src;              /* TCP/UDP/SCTP source port. */
-    uint16_t tp_dst;              /* TCP/UDP/SCTP destination port. */
-
-    uint32_t packet_count;        /* Packets from subrules. */
-    uint32_t byte_count;          /* Bytes from subrules. */
-    uint64_t used;           /* Last-used time (0 if never used). */
-    time_t first_timestamp;
-    time_t last_timestamp;
+    struct hmap_node hmap_node;    /* 哈希节点 */
+    uint64_t active_flow_expired;    /* 上一次活跃流老化时间 */
+    uint64_t created;    /* 流被创建的时间 */
+    ofp_port_t output_iface;    /* 输出接口索引 */
+    uint16_t tcp_flags;    /* TCP标记进行“或”后的值 */
+    ofp_port_t in_port;    /* 输入端口 */
+    uint32_t nw_src;    /* 源IP地址 */
+    uint32_t nw_dst;    /* 目的IP地址 */
+    uint8_t nw_tos;    /* IP服务类型 */
+    uint8_t nw_proto;    /* IP协议号 */
+    uint16_t tp_src;    /* 源端口号 */
+    uint16_t tp_dst;    /* 目的端口号 */
+    uint32_t packet_count;    /* 报文数目 */
+    uint32_t byte_count;    /* 总的字节数 */
+    uint64_t used;    /* 上一次使用时间 */
+    time_t first_timestamp;    /* 流第一次使用的时间戳 */
+    time_t last_timestamp;    /* 流最后一次使用的时间戳 */
 };
 
 /* Every NetStream v5 message contains the header that follows.  This is
@@ -157,7 +146,7 @@ struct netstream_v5_header {
                                       messages began. */
     uint8_t  engine_type;          /* Engine type. */
     uint8_t  engine_id;            /* Engine id. */
-    uint16_t sampling;             /* First two bits hold the sampling mode; remaining 14 bits hold value of sampling interval */
+    uint8_t  pad[2];             /* First two bits hold the sampling mode; remaining 14 bits hold value of sampling interval */
 };
 
 /* A NetStream v5 description of a terminating flow.  It is preceded by a
@@ -189,7 +178,7 @@ struct netstream_v5_record {
     uint16_t dst_as;               /* Destination AS ID.  Set to 0. */
     uint8_t  src_mask;             /* Source mask bits.  Set to 0. */
     uint8_t  dst_mask;             /* Destination mask bits.  Set to 0. */
-    uint8_t  pad[2];
+    uint8_t  pad2[2];
 };
 
 struct netstream *netstream_create(char *);

@@ -69,7 +69,7 @@ netstream_create(char *bridge_name)
     ns->collectors = NULL;
     ns->add_id_to_iface = false;
     ns->netstream_cnt = 0;
-    ns->tcp_flag = false;
+    ns->tcp_flags = false;
     ns->log = false;
     hmap_init(&ns->flows);
     ovs_refcount_init(&ns->ref_cnt);
@@ -90,17 +90,16 @@ netstream_set_options(struct netstream *ns,
     ns->engine_type = ns_options->engine_type;
     ns->engine_id = ns_options->engine_id;
     ns->add_id_to_iface = ns_options->add_id_to_iface;
-    ns->sample_mode = ns_options->sample_mode;
     ns->sample_interval = ns_options->sample_interval;
-    ns->flow_cache_number = ns_options->flow_cache_number;
-    ns->tcp_flag = ns_options->tcp_flag;
+    ns->max_flow = ns_options->max_flow;
+    ns->tcp_flags = ns_options->tcp_flags;
 
     ns->log = ns_options->log;
     /* 日志功能开关发生了变化 */
     if (ns->log) {
         /* 创建目录、环形队列以及数据库(不存在的情况下) */
         netstream_log_path_init(ns);
-        netstream_db_createque(&ns->ns_db_que, ns->flow_cache_number);
+        netstream_db_createque(&ns->ns_db_que, ns->max_flow);
         netstream_create_database(ns);
     } else
     {
@@ -126,7 +125,7 @@ netstream_set_options(struct netstream *ns,
     old_timeout = ns->active_timeout;
     ns->active_timeout = ns_options->active_timeout * 1000 * 60;
     if (old_timeout != ns->active_timeout) {
-        ns->reconfig_active_timeout = time_msec();
+
         ns->next_timeout = time_msec();
     }
     ovs_mutex_unlock(&mutex);
@@ -171,7 +170,6 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
     long long int now = time_msec();
     struct netstream_flow *ns_flow, *next;
 
-    /* 发送已经累积的NetStream报文 */
     if (ns->packet.size) {
         if (collectors_send(ns->collectors, ns->packet.data, ns->packet.size) != 0) {
             VLOG_ERR_RL(&rl, "%s: send NetStream packet fail.", ns->bridge_name);
@@ -196,8 +194,8 @@ netstream_run__(struct netstream *ns) OVS_REQUIRES(mutex)
             continue;
         }
         /* 活跃流老化 */
-        if (now > ns_flow->last_expired + ns->active_timeout) {
-            ns_flow->last_expired += ns->active_timeout;    //更新上一次活跃流超时的时间
+        if (now > ns_flow->active_flow_expired + ns->active_timeout) {
+            ns_flow->active_flow_expired += ns->active_timeout;    //更新上一次活跃流超时的时间
             netstream_expire__(ns, ns_flow);
         }
     }
@@ -292,7 +290,7 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
         ns_hdr->unix_nsecs = htonl(now.tv_nsec);
         ns_hdr->engine_type = ns->engine_type;  //单字节不需要大小段转换
         ns_hdr->engine_id = ns->engine_id;
-        ns_hdr->sampling = htons((((uint16_t)ns->sample_mode << 14) & 0xc000) | (ns->sample_interval & 0x3fff));
+        ns_hdr->sampling = 0;
     }
 
     ns_hdr = ns->packet.data;
@@ -397,7 +395,10 @@ gen_netstream_rec(struct netstream *ns, struct netstream_flow *ns_flow)
 
     /* NetStream messages are limited to 30 records. */
     if (ntohs(ns_hdr->count) >= 30) {
-        netstream_run__(ns);
+        if (collectors_send(ns->collectors, ns->packet.data, ns->packet.size) != 0) {
+            VLOG_ERR_RL(&rl, "%s: send NetStream packet fail.", ns->bridge_name);
+        }
+        ns->packet.size = 0;
     }
 }
 
@@ -731,7 +732,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     ns_flow = netstream_flow_lookup(ns, flow);
     if (!ns_flow) {
         
-        if (hmap_count(&ns->flows) >= ns->flow_cache_number) {
+        if (hmap_count(&ns->flows) >= ns->max_flow) {
             VLOG_ERR_RL(&rl, "The maximum number of streams has been reached.\n");
             ovs_mutex_unlock(&mutex);
             return;
@@ -745,7 +746,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
         ns_flow->tp_src = flow->tp_src;
         ns_flow->tp_dst = flow->tp_dst;
         ns_flow->created = stats->used;
-        ns_flow->last_expired = stats->used;
+        ns_flow->active_flow_expired = stats->used;
         ns_flow->output_iface = output_iface;
         ns_flow->in_port = flow->in_port.ofp_port;
         ns_flow->first_timestamp = ns_flow->last_timestamp = time_wall();
@@ -778,7 +779,7 @@ netstream_flow_update(struct netstream *ns, const struct flow *flow,
     /* 对于TCP连接，当有标志为FIN或RST的报文发送时，表示一次会话结束。当一条已经存在的NetStream流中流过
     一条标志为FIN或RST的报文时，可以立即老化相应的NetStream流，节省内存空间。因此建议在设备上开启由TCP
     连接的FIN和RST报文触发老化的老化方式。 */
-    if (ns_flow->nw_proto == NS_TCP && ns_flow->packet_count >= 1 &&
+    if (ns->tcp_flags && ns_flow->nw_proto == NS_TCP && ns_flow->packet_count >= 1 &&
         (stats->tcp_flags & (TCP_FIN | TCP_RST))) {
         netstream_expire__(ns, ns_flow);
         hmap_remove(&ns->flows, &ns_flow->hmap_node);
