@@ -637,8 +637,9 @@ ns_query_get_table(sqlite3 *db, char *sqlcmd, bool verbose)
                            result[i *  n_column + 1], result[i *  n_column + 3], \
                            result[i *  n_column + 4], result[i *  n_column + 7], \
                            result[i *  n_column + 8], result[i *  n_column + 9]);
-                    printf("SampleInterval: %16s      Tos: %25s\n", result[i *  n_column + 12], \
-                           result[i *  n_column + 11]);
+                    uint8_t tos;
+                    sscanf(result[i *  n_column + 11], "%u", &tos);
+                    printf("SampleInterval: %16s      Tos:                      0x%02x\n", result[i *  n_column + 12], tos);
                     printf("Bytes: %25s      Bytes/Pkts: %18s\n",  \
                            result[i *  n_column + 10], result[i *  n_column + 13]);
                     printf("StartTime: %21s      EndTime: %21s\n", \
