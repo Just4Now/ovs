@@ -241,6 +241,7 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
                         q_c->q_s_cond[SRC_PORT].is_specified = true;
                         q_c->cond_br_only = false;
                         sprintf(q_c->q_s_cond[SRC_PORT].value, "%u", port);
+                        port = 0;
                     }else
                     {
                         printf("The port number(%u) is out of range.(0 to 65535 is valid)\n", port);
@@ -258,6 +259,7 @@ static void parser_commands(int argc, char **argv, struct query_conditions *q_c)
                         q_c->q_s_cond[DST_PORT].is_specified = true;
                         q_c->cond_br_only = false;
                         sprintf(q_c->q_s_cond[DST_PORT].value, "%u", port);
+                        port = 0;
                     }else
                     {
                         printf("The port number(%u) is out of range.(0 to 65535 is valid)\n", port);

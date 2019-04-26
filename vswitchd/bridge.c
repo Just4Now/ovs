@@ -1206,7 +1206,7 @@ bridge_configure_netstream(struct bridge *br)
 
     /* Confugure inactive timeout interval */
     opts.inactive_timeout = NS_INACTIVE_TIMEOUT_DEFAULT;
-    if (cfg->active_timeout) {
+    if (cfg->inactive_timeout) {
         opts.inactive_timeout = *cfg->inactive_timeout;
     }
 
